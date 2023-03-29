@@ -10,7 +10,14 @@
 
 # Load the necessary modules
 module purge
-module load python/3.8.0 cuda/11.1.1 wandb
+module load python/3.9.0 cuda/11.1.1 wandb
+
+# Create a virtual environment and activate it
+python -m venv .venv
+source .venv/bin/activate
+
+# Install the required packages
+pip install -r requirements.txt
 
 USER=$(whoami)
 SCRATCH_DIR=/scratch/$USER/$SLURM_JOBID
@@ -25,8 +32,11 @@ IFS=' ' read -r -a GPU_DEVICES_ARRAY <<< "$GPU_DEVICES"
 
 # Launch the WandB agents with the specified GPU devices
 for ((i=0; i<${#GPU_DEVICES_ARRAY[@]}; i++)); do
-  CUDA_VISIBLE_DEVICES=${GPU_DEVICES_ARRAY[$i]} wandb agent SWEEP_ID --count 1 --parallel &
+  CUDA_VISIBLE_DEVICES=${GPU_DEVICES_ARRAY[$i]} python $SWEEP_ID &
 done
 
 # Wait for all jobs to finish
 wait
+
+# Deactivate the virtual environment
+deactivate
