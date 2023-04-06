@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Job
+metadata:
+  name: dominoes
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dominoes
+  template:
+    metadata:
+      labels:
+        app: dominoes
+    spec:
+      containers:
+      - name: dominoes
+        image: jqhoogland/dominoes:1.0
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        command: ["python", "train.py"]

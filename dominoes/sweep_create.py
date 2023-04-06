@@ -29,7 +29,6 @@ from dominoes.models import DominoDetector, ExtendedModule
 
 wandb.login()
 
-
 class DominoSweepConfig(TypedDict):
     r_mnist_to_cifar: float
     p_both: float
@@ -115,5 +114,4 @@ def get_sweep_id(sweep_config):
     return sweep_id
 
 
-sweep_id = get_sweep_id(sweep_config)
-wandb.agent(sweep_id, function=train, count=10 * 10)
+print("WANDB_SWEEP_ID:", get_sweep_id(sweep_config))
