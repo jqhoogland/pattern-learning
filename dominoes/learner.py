@@ -4,7 +4,7 @@ import os
 import random
 import sys
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Tuple, Union
 
 import einops
 import numpy as np
@@ -104,7 +104,7 @@ class Learner:
 class DominoesLearner(Learner):
 
     @classmethod
-    def create(cls, model_type, optimizer_type, criterion_type, dominoes_config: DominoesConfig | tuple[DominoesConfig, DominoesConfig], **kwargs):
+    def create(cls, model_type, optimizer_type, criterion_type, dominoes_config: Union[DominoesConfig, Tuple[DominoesConfig, DominoesConfig]], **kwargs):
         if not isinstance(dominoes_config, tuple):
             dominoes_config = (dominoes_config, dominoes_config)
 

@@ -40,35 +40,6 @@ class DominoSweepConfig(TypedDict):
     epochs: int
 
 
-def train():
-    wandb.init(project="dominoes")
-    # config = wandb.config 
-    # print(config)
-
-    config = DominoSweepConfig(r_mnist_to_cifar=0.5, p_both=0.3, p_mnist_error=0, p_cifar_error=0, seed=0, batch_size=64, lr=0.001, epochs=2)
-
-    learner = DominoesLearner.create(
-        model_type=DominoDetector,
-        optimizer_type=optim.SGD,
-        criterion_type=nn.CrossEntropyLoss,
-        dominoes_config=DominoesConfig(
-            r_mnist_to_cifar=config["r_mnist_to_cifar"],
-            p_both=config["p_both"],
-            p_mnist_error=config["p_mnist_error"],
-            p_cifar_error=config["p_cifar_error"],
-            seed=config["seed"],
-        ),
-        batch_size=config["batch_size"],
-        lr=config["lr"],
-        epochs=config["epochs"]
-    )
-
-    wandb.watch(learner.model)
-    metrics = learner.train()
-
-    return metrics
-
-
 def r_mnist_to_cifar_range(min_=0.33333333, num=11):
     assert num % 2 == 1, "num must be odd"
 
@@ -86,10 +57,10 @@ sweep_config = {
         'p_both': {'value': 0.33333333},
         'p_mnist_error': {'value': 0},
         "p_cifar_error": {'value': 0},
-        "seed": {'values': list(range(1))},
+        "seed": {'values': list(range(10))},
         'batch_size': {'value': 64},
         'lr': {'value': 0.001},
-        'epochs': {'value': 1}
+        'epochs': {'value': 5}
     }
 }
 

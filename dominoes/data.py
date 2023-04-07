@@ -3,7 +3,7 @@ import logging
 import random
 import sys
 from dataclasses import asdict, dataclass
-from typing import Generic, TypeVar
+from typing import Dict, Generic, Tuple, TypeVar, Union
 
 import einops
 import numpy as np
@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchtyping import TensorType
 from tqdm.notebook import tqdm
 
-MNIST_OR_CIFAR10 = torchvision.datasets.MNIST | torchvision.datasets.CIFAR10
+MNIST_OR_CIFAR10 = Union[torchvision.datasets.MNIST, torchvision.datasets.CIFAR10]
 
 # Load the datasets (MNIST and CIFAR-10)
 mnist_train = torchvision.datasets.MNIST(root='./data', train=True, download=True)
@@ -37,7 +37,7 @@ def mnist_to_domino(mnist: TensorType["b", 28, 28]) -> TensorType["b", 3, 32, 32
     return mnist
 
 
-def cifar_to_domino(cifar: np.ndarray | t.Tensor) -> TensorType["b", 3, 32, 32]:
+def cifar_to_domino(cifar: Union[np.ndarray, t.Tensor]) -> TensorType["b", 3, 32, 32]:
     cifar = t.tensor(cifar).float()
     cifar = t.nn.functional.pad(cifar, (0, 0, 0, 0, 32, 0))
 
@@ -235,7 +235,7 @@ class DataLoaders:
     TODO: Allow different configurations for different dataLoaders
     """
 
-    def __init__(self, datasets: dict[str, Dominoes] | tuple[Dominoes, Dominoes], **kwargs):
+    def __init__(self, datasets: Union[Dict[str, Dominoes], Tuple[Dominoes, Dominoes]], **kwargs):
         if isinstance(datasets, tuple):
             self.datasets = {"train": datasets[0], "test": datasets[1]}
         else:
