@@ -1,3 +1,4 @@
+import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from typing import Callable, Literal, Optional, Tuple, Union
@@ -18,27 +19,13 @@ DEFAULT_MODULUS = 113
 Reduction = Literal["mean", "sum"]
 
 
+def sup_distance(d1: dict, d2: dict):
+    return max(abs(d1[k] - d2[k]) for k in d1)
+
+
 @dataclass
 class Config:
-    # Model
-    num_layers: int = 1
-    num_heads: int = 4
-    d_model: int = 128
-    d_vocab: int = DEFAULT_MODULUS + 1
-    d_mlp: int = None  # 4 * d_model  # type: ignore
-    d_head: int = None  # d_model // num_heads  # type: ignore
-    num_ctx: int = 3
-    act_fn: Callable = F.relu
     load_path: Optional[str] = None
-    # use_ln: bool = True
-
-    # Dataset
-    operator: Operator = "+"
-    modulus: int = DEFAULT_MODULUS
-    frac_label_noise: float = 0.0
-    seed: int = 0
-    shuffle: bool = True
-    frac_train: float = 0.3
 
     # Dataloaders
     batch_size: int = -1  # Defaults to full batch
@@ -50,9 +37,8 @@ class Config:
     momentum: Union[float, Tuple[float, float]] = None  # type: ignore
 
     # Training
-    num_training_steps: int = int(3e5)
-    num_jobs: int = 1
-    test_acc_criterion: float = 0.99
+    num_training_steps: int = int(1e5)
+    test_acc_criterion: float = 1.0
     device: torch.device = field(
         default_factory=lambda: torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
@@ -69,19 +55,56 @@ class Config:
     weights_dir: str = "weights"
 
     def __post_init__(self):
+        if self.no_logging:
+            self.wandb_project = None
+        if self.momentum is None:
+            self.momentum = 0.9 if self.use_sgd else (0.9, 0.98)
+        if isinstance(self.device, str):
+            self.device = torch.device(self.device)
+
+
+@dataclass
+class GrokkingConfig(Config):
+    # Model
+    num_layers: int = 1
+    num_heads: int = 4
+    d_model: int = 128
+    d_vocab: int = DEFAULT_MODULUS + 1
+    d_mlp: int = None  # 4 * d_model  # type: ignore
+    d_head: int = None  # d_model // num_heads  # type: ignore
+    num_ctx: int = 3
+    act_fn: Callable = F.relu
+    # use_ln: bool = True
+
+    # Dataset
+    operator: Operator = "+"
+    modulus: int = DEFAULT_MODULUS
+    frac_label_noise: float = 0.0
+    seed: int = 0
+    shuffle: bool = True
+    frac_train: float = 0.3
+
+    def __post_init__(self):
         if self.d_mlp is None:
             self.d_mlp = 4 * self.d_model
         if self.d_head is None:
             self.d_head = self.d_model // self.num_heads
-        if self.no_logging:
-            self.wandb_project = None
         if self.batch_size == -1:
             self.batch_size = int((self.modulus * self.modulus) * self.frac_train)
-        if self.momentum is None:
-            self.momentum = 0.9 if self.use_sgd else (0.9, 0.98)
+
+        if isinstance(self.act_fn, str):
+            try:
+                self.act_fn = getattr(F, self.act_fn)
+            except AttributeError:
+                warnings.warn(
+                    f"Could not find activation function {self.act_fn}, falling back to ReLU"
+                )
+                self.act_fn = F.relu
+
+        super().__post_init__()
 
 
-class GrokkingLearner:
+class BaseLearner:
     def __init__(
         self,
         model: nn.Module,
@@ -104,85 +127,18 @@ class GrokkingLearner:
         config: Config,
         trainloader: DataLoader,
         testloader: DataLoader,
-    ) -> "GrokkingLearner":
+    ) -> "BaseLearner":
         model = cls.get_model(config)
         optimizer = cls.get_optimizer(config, model)
         return cls(model, optimizer, config, trainloader, testloader)
 
     @classmethod
     def get_model(cls, config: Config) -> nn.Module:
-        model = Transformer(
-            num_layers=config.num_layers,
-            num_heads=config.num_heads,
-            d_model=config.d_model,
-            d_vocab=config.d_vocab,
-            d_mlp=config.d_mlp,
-            d_head=config.d_head,
-            num_ctx=config.num_ctx,
-            act_fn=config.act_fn,
-        )
-
-        if config.load_path is not None:
-            model.load_state_dict(torch.load(config.load_path))
-
-        model.to(config.device)
-
-        num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print(f"Model has {num_params} trainable parameters")
-
-        return model
+        raise NotImplementedError
 
     @classmethod
     def get_optimizer(cls, config: Config, model: nn.Module) -> optim.Optimizer:
-        if config.use_sgd and isinstance(config.momentum, float):
-            optimizer = optim.SGD(
-                model.parameters(),
-                lr=config.lr,
-                weight_decay=config.weight_decay,
-                momentum=config.momentum,
-            )
-        elif isinstance(config.momentum, tuple):
-            optimizer = optim.AdamW(
-                model.parameters(),
-                lr=config.lr,
-                weight_decay=config.weight_decay,
-                betas=config.momentum,
-            )
-        else:
-            raise ValueError(f"Invalid momentum configuration {config.momentum}")
-
-        return optimizer
-
-    def train(self):
-        steps_per_epoch = len(self.trainloader)
-        step = 0
-
-        for epoch in tqdm(
-            range(1, int(self.config.num_training_steps / steps_per_epoch) + 1)
-        ):
-            for i, (x, y) in enumerate(self.trainloader):
-                if step % self.config.log_interval == 0:
-                    metrics = self.validate()
-                    wandb.log(metrics, step=step)
-
-                    if metrics["test/acc"] >= self.config.test_acc_criterion:
-                        print("Test accuracy criterion reached")
-                        return
-
-                self.model.train()
-                x, y = x.to(self.config.device), y.to(self.config.device)
-                y_hat = self.model(x)
-                loss = criterion(y_hat, y, reduction="mean")
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                step += 1
-
-    def save(self, path: Optional[str]):
-        path = path or f"{self.config.weights_dir}/{self.name}.pt"
-        torch.save(self.model.state_dict(), path)
+        raise NotImplementedError
 
     @property
     def name(self):
@@ -205,6 +161,44 @@ class GrokkingLearner:
             },
             append_hash=True,
         )
+
+    def train(self):
+        steps_per_epoch = len(self.trainloader)
+        step = 0
+        prev_metrics = self.validate()
+        wandb.log(prev_metrics, step=step)
+
+        for epoch in tqdm(
+            range(1, int(self.config.num_training_steps / steps_per_epoch) + 1)
+        ):
+            for i, (x, y) in enumerate(self.trainloader):
+                if step % self.config.log_interval == 0 and step > 0:
+                    metrics = self.validate()
+                    wandb.log(metrics, step=step)
+
+                    if (
+                        sup_distance(metrics, prev_metrics) < 1e-4
+                        and metrics["test/acc"] > self.config.test_acc_criterion
+                    ):
+                        print("Stopping early")
+                        return
+
+                    prev_metrics = metrics
+
+                self.model.train()
+                x, y = x.to(self.config.device), y.to(self.config.device)
+                y_hat = self.model(x)
+                loss = self.criterion(y_hat, y, reduction="mean")
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                step += 1
+
+    def save(self, path: Optional[str]):
+        path = path or f"{self.config.weights_dir}/{self.name}.pt"
+        torch.save(self.model.state_dict(), path)
 
     @staticmethod
     def criterion(logits, labels, reduction: Reduction = "sum"):
@@ -269,13 +263,15 @@ class GrokkingLearner:
         def _dist_from_init(model):
             distance = torch.zeros(1, dtype=torch.float64, device=self.config.device)
             for p, p0 in zip(model.parameters(), self.initial_weights):
-                distance += (p - p.initial_value).norm().pow(2)
+                distance += (p - p0).norm().pow(2)
 
             return distance.sqrt()
 
         def _cos_sim_with_init(model):
             cos_sim = torch.zeros(1, dtype=torch.float64, device=self.config.device)
-            norm1, norm2 = torch.zeros(1), torch.zeros(1)
+            norm1, norm2 = torch.zeros(
+                1, dtype=torch.float64, device=self.config.device
+            ), torch.zeros(1, dtype=torch.float64, device=self.config.device)
 
             for p, p0 in zip(model.parameters(), self.initial_weights):
                 cos_sim += (p * p0).sum()
@@ -303,3 +299,51 @@ class GrokkingLearner:
             "weight/dist_from_init": dist_from_init.item(),
             "weight/cos_sim_with_init": cos_sim_with_init.item(),
         }
+
+
+class GrokkingLearner(BaseLearner):
+    Config = GrokkingConfig
+
+    @classmethod
+    def get_model(cls, config: Config) -> nn.Module:
+        model = Transformer(
+            num_layers=config.num_layers,
+            num_heads=config.num_heads,
+            d_model=config.d_model,
+            d_vocab=config.d_vocab,
+            d_mlp=config.d_mlp,
+            d_head=config.d_head,
+            num_ctx=config.num_ctx,
+            act_fn=config.act_fn,
+        )
+
+        if config.load_path is not None:
+            model.load_state_dict(torch.load(config.load_path))
+
+        model.to(config.device)
+
+        num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Model has {num_params} trainable parameters")
+
+        return model
+
+    @classmethod
+    def get_optimizer(cls, config: Config, model: nn.Module) -> optim.Optimizer:
+        if config.use_sgd and isinstance(config.momentum, float):
+            optimizer = optim.SGD(
+                model.parameters(),
+                lr=config.lr,
+                weight_decay=config.weight_decay,
+                momentum=config.momentum,
+            )
+        elif isinstance(config.momentum, (list, tuple)):
+            optimizer = optim.AdamW(
+                model.parameters(),
+                lr=config.lr,
+                weight_decay=config.weight_decay,
+                betas=config.momentum,
+            )
+        else:
+            raise ValueError(f"Invalid momentum configuration {config.momentum}")
+
+        return optimizer
