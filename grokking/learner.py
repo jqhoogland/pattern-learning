@@ -181,9 +181,9 @@ class BaseLearner:
                     wandb.log(metrics, step=step)
 
                     if (
-                        abs(prev_metrics["test/loss"] - metrics["test/loss"]) < 1e-9
+                        abs(prev_metrics["test/loss"] - metrics["test/loss"]) < 1e-12
                         and abs(prev_metrics["train/loss"] - metrics["train/loss"])
-                        < 1e-9
+                        < 1e-12
                         and metrics["test/acc"] == 1.0
                     ):
                         print("Stopping early")
