@@ -54,6 +54,9 @@ class Config:
 
     weights_dir: str = "weights"
 
+    seed: int = 0
+    shuffle: bool = True
+
     def __post_init__(self):
         if self.no_logging:
             self.wandb_project = None
@@ -80,8 +83,6 @@ class GrokkingConfig(Config):
     operator: Operator = "+"
     modulus: int = DEFAULT_MODULUS
     frac_label_noise: float = 0.0
-    seed: int = 0
-    shuffle: bool = True
     frac_train: float = 0.3
 
     def __post_init__(self):
@@ -165,6 +166,7 @@ class BaseLearner:
     def train(self):
         steps_per_epoch = len(self.trainloader)
         step = 0
+
         prev_metrics = self.validate()
         wandb.log(prev_metrics, step=step)
 
@@ -172,13 +174,17 @@ class BaseLearner:
             range(1, int(self.config.num_training_steps / steps_per_epoch) + 1)
         ):
             for i, (x, y) in enumerate(self.trainloader):
-                if step % self.config.log_interval == 0 and step > 0:
+                if (
+                    step < 100 or (step < 1000 and step % 5 == 0) or step % 10 == 0
+                ) and step > 0:
                     metrics = self.validate()
                     wandb.log(metrics, step=step)
 
                     if (
-                        sup_distance(metrics, prev_metrics) < 1e-4
-                        and metrics["test/acc"] > self.config.test_acc_criterion
+                        abs(prev_metrics["test/loss"] - metrics["test/loss"]) < 1e-9
+                        and abs(prev_metrics["train/loss"] - metrics["train/loss"])
+                        < 1e-9
+                        and metrics["test/acc"] == 1.0
                     ):
                         print("Stopping early")
                         return
@@ -201,26 +207,21 @@ class BaseLearner:
         torch.save(self.model.state_dict(), path)
 
     @staticmethod
-    def criterion(logits, labels, reduction: Reduction = "sum"):
-        """
-        Wrapper around cross entropy loss because we only care about the last number predicted.
-        """
+    def criterion(outputs, targets, reduction: Reduction = "sum"):
+        raise NotImplementedError
 
-        # Only look at predictions of last numbers
-        logits = logits[:, -1]
-
-        # Compute individual and summed losses for final number
-        logprobs = F.log_softmax(logits.to(torch.float64), dim=-1)
-        prediction_logprobs = torch.gather(logprobs, index=labels.unsqueeze(1), dim=-1)
+    def accuracy(self, outputs, targets, reduction: Reduction = "sum"):
+        preds = outputs.argmax(dim=1)
+        acc = (preds == targets).float()
 
         if reduction == "mean":
-            loss = -torch.mean(prediction_logprobs)
+            acc = acc.mean()
         elif reduction == "sum":
-            loss = -torch.sum(prediction_logprobs)
-        else:
+            acc = acc.sum()
+        elif reduction != "none":
             raise ValueError("Invalid reduction argument.")
 
-        return loss
+        return acc
 
     def validate(self):
         """
@@ -241,9 +242,8 @@ class BaseLearner:
                     x, y = x.to(self.config.device), y.to(self.config.device)
                     y_hat = self.model(x)
                     loss += self.criterion(y_hat, y, reduction="sum")
+                    acc += self.accuracy(y_hat, y, reduction="sum")
 
-                    y_pred = y_hat.argmax(dim=-1)[:, -1].detach()
-                    acc += (y == y_pred).float().sum()
                     num_samples += y.shape[0]
 
             loss /= num_samples
@@ -300,6 +300,27 @@ class BaseLearner:
             "weight/cos_sim_with_init": cos_sim_with_init.item(),
         }
 
+    @classmethod
+    def get_optimizer(cls, config: Config, model: nn.Module) -> optim.Optimizer:
+        if config.use_sgd and isinstance(config.momentum, float):
+            optimizer = optim.SGD(
+                model.parameters(),
+                lr=config.lr,
+                weight_decay=config.weight_decay,
+                momentum=config.momentum,
+            )
+        elif isinstance(config.momentum, (list, tuple)):
+            optimizer = optim.AdamW(
+                model.parameters(),
+                lr=config.lr,
+                weight_decay=config.weight_decay,
+                betas=config.momentum,
+            )
+        else:
+            raise ValueError(f"Invalid momentum configuration {config.momentum}")
+
+        return optimizer
+
 
 class GrokkingLearner(BaseLearner):
     Config = GrokkingConfig
@@ -327,23 +348,37 @@ class GrokkingLearner(BaseLearner):
 
         return model
 
-    @classmethod
-    def get_optimizer(cls, config: Config, model: nn.Module) -> optim.Optimizer:
-        if config.use_sgd and isinstance(config.momentum, float):
-            optimizer = optim.SGD(
-                model.parameters(),
-                lr=config.lr,
-                weight_decay=config.weight_decay,
-                momentum=config.momentum,
-            )
-        elif isinstance(config.momentum, (list, tuple)):
-            optimizer = optim.AdamW(
-                model.parameters(),
-                lr=config.lr,
-                weight_decay=config.weight_decay,
-                betas=config.momentum,
-            )
-        else:
-            raise ValueError(f"Invalid momentum configuration {config.momentum}")
+    @staticmethod
+    def criterion(outputs, targets, reduction: Reduction = "sum"):
+        """
+        Wrapper around cross entropy loss because we only care about the last number predicted.
+        """
+        # Only look at predictions of last numbers
+        outputs = outputs[:, -1]
 
-        return optimizer
+        # Compute individual and summed losses for final number
+        logprobs = F.log_softmax(outputs.to(torch.float64), dim=-1)
+        prediction_logprobs = torch.gather(logprobs, index=targets.unsqueeze(1), dim=-1)
+
+        if reduction == "mean":
+            loss = -torch.mean(prediction_logprobs)
+        elif reduction == "sum":
+            loss = -torch.sum(prediction_logprobs)
+        else:
+            raise ValueError("Invalid reduction argument.")
+
+        return loss
+
+    @staticmethod
+    def accuracy(outputs, targets, reduction: Reduction = "sum"):
+        y_pred = outputs.argmax(dim=-1)[:, -1].detach()
+        acc = y_pred == targets
+
+        if reduction == "mean":
+            acc = torch.mean(acc)
+        elif reduction == "sum":
+            acc = torch.sum(acc)
+        elif reduction != "none":
+            raise ValueError("Invalid reduction argument.")
+
+        return acc
