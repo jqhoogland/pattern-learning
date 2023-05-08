@@ -1,4 +1,8 @@
 import hashlib
+from contextlib import contextmanager
+from datetime import datetime
+
+import wandb
 
 
 def generate_run_name(
@@ -36,3 +40,17 @@ def generate_run_name(
         run_name += f"_{config_hash}"
 
     return run_name
+
+
+@contextmanager
+def wandb_run(**kwargs):
+    try:
+        run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        kwargs.setdefault("settings", wandb.Settings(start_method="thread"))
+        kwargs.setdefault("id", run_id)
+        wandb.init(**kwargs)
+
+        yield
+
+    finally:
+        wandb.finish()

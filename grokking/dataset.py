@@ -103,7 +103,7 @@ class ModularArithmetic(Dataset):
             num_noise = int(frac_label_noise * len(data))
             noise_from = torch.randperm(len(data))[:num_noise]
             noise_to = noise_from.roll(1)
-            labels[noise_from, 2] = labels[noise_to, 2]
+            labels[noise_from] = labels[noise_to]
 
         if shuffle:
             permutation = torch.randperm(len(data))

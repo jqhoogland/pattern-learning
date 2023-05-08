@@ -72,7 +72,7 @@ class GrokkingConfig(Config):
     num_layers: int = 1
     num_heads: int = 4
     d_model: int = 128
-    d_vocab: int = DEFAULT_MODULUS + 1
+    d_vocab: Optional[int] = None
     d_mlp: int = None  # 4 * d_model  # type: ignore
     d_head: int = None  # d_model // num_heads  # type: ignore
     num_ctx: int = 3
@@ -92,6 +92,8 @@ class GrokkingConfig(Config):
             self.d_head = self.d_model // self.num_heads
         if self.batch_size == -1:
             self.batch_size = int((self.modulus * self.modulus) * self.frac_train)
+        if self.d_vocab is None:
+            self.d_vocab = self.modulus + 1
 
         if isinstance(self.act_fn, str):
             try:
