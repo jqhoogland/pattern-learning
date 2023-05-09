@@ -17,10 +17,10 @@ from torch.utils.data import DataLoader
 from tqdm.notebook import tqdm
 
 import wandb
-from grokking.dataset import ModularArithmetic, Operator
-from grokking.learner import GrokkingConfig, GrokkingLearner
-from grokking.transformer import Transformer
-from grokking.utils import generate_run_name
+from patterns.dataset import ModularArithmetic, Operator
+from patterns.learner import GrokkingConfig, GrokkingLearner
+from patterns.transformer import Transformer
+from patterns.utils import generate_run_name
 
 PROJECT = "grokking"
 

@@ -7,6 +7,7 @@ from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from datetime import datetime
+
 # import cifar10
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
@@ -20,12 +21,11 @@ from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 from tqdm.notebook import tqdm
 
 import wandb
-from grokking.dataset import ModularArithmetic, Operator
-from grokking.learner import (BaseLearner, GrokkingConfig, GrokkingLearner,
-                              Reduction)
-from grokking.transformer import Transformer
-from grokking.utils import generate_run_name, wandb_run
-from grokking.vision import ExtModule, VisionConfig, VisionLearner
+from patterns.dataset import ModularArithmetic, Operator
+from patterns.learner import BaseLearner, GrokkingConfig, GrokkingLearner, Reduction
+from patterns.transformer import Transformer
+from patterns.utils import generate_run_name, wandb_run
+from patterns.vision import ExtModule, VisionConfig, VisionLearner
 
 # Normalize & transform to tensors
 mnist_train = MNIST(
@@ -120,9 +120,9 @@ PROJECT = "mnist-grokking"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DEFAULT_MNIST_CONFIG = MNISTConfig(
     wandb_project=PROJECT,
-    frac_train=1., 
+    frac_train=1.0,
     frac_label_noise=0.0,
-    batch_size=200, # 1000 / 200 = 5 steps per epoch
+    batch_size=200,  # 1000 / 200 = 5 steps per epoch
     num_training_steps=50_000,  # = 10,000 epochs
     # num_training_steps=int(1e6), #  = 200,000 epochs
     num_layers=2,

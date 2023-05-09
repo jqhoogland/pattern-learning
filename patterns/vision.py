@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 
-from grokking.learner import BaseLearner, Config, Reduction
+from patterns.learner import BaseLearner, Config, Reduction
 
 
 class ExtModule(nn.Module):

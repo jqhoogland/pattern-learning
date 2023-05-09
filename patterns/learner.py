@@ -10,9 +10,9 @@ from torch.utils.data import DataLoader
 from tqdm.notebook import tqdm
 
 import wandb
-from grokking.dataset import ModularArithmetic, Operator
-from grokking.transformer import Transformer
-from grokking.utils import generate_run_name
+from patterns.dataset import ModularArithmetic, Operator
+from patterns.transformer import Transformer
+from patterns.utils import generate_run_name
 
 DEFAULT_MODULUS = 113
 
