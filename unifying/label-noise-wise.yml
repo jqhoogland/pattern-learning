@@ -4,12 +4,16 @@ program: train.py
 project: grokking
 parameters:  
     weight_decay:
-        value: 0.3
+        # value: 0.3
+        value: 0.2
     num_training_steps:
-        value: 50000
+        value: 100000
     d_model:
         value: 150
     frac_train:
         value: 0.7
     frac_label_noise:
-        values: [0.0, 0.25, 0.5, 0.1, 0.2, 0.3, 0.4, 0.05, 0.15, 0.35, 0.45]
+        # values: [0.0, 0.25, 0.5, 0.1, 0.2, 0.3, 0.4, 0.05, 0.15, 0.35, 0.45]
+        values: [0.0, 0.25, 0.1, 0.2, 0.3, 0.4, 0.05, 0.15, 0.35, 0.125, 0.375, 0.625, 0.875]
+
+# TODO: Rerun for longer, with no label noise on the test set, and only up to 0.3, with more increments.
