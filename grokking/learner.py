@@ -177,7 +177,10 @@ class BaseLearner:
         ):
             for i, (x, y) in enumerate(self.trainloader):
                 if (
-                    step < 100 or (step < 1000 and step % 5 == 0) or step % 10 == 0
+                    step < 100
+                    or (step < 1000 and step % 5 == 0)
+                    or (step < 10000 and step % 10 == 0)
+                    or (step % 100 == 0)
                 ) and step > 0:
                     metrics = self.validate()
                     wandb.log(metrics, step=step)
