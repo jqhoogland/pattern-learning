@@ -16,7 +16,7 @@ import yaml
 from argparse_dataclass import ArgumentParser
 from torch import nn, optim
 from torch.utils.data import DataLoader
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 
 import wandb
 from patterns.dataset import ModularArithmetic, Operator
@@ -27,14 +27,17 @@ from patterns.utils import generate_run_name
 PROJECT = "grokking"
 
 parser = ArgumentParser(GrokkingConfig)
-default_config = parser.parse_args()
+
+try:
+    default_config = parser.parse_args()
+except:
+    default_config = GrokkingConfig()
 
 
 def main():
     # Logging
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
-    print(default_config)
     wandb.init(
         project=PROJECT,
         id=run_id,

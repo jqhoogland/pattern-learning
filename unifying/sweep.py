@@ -126,3 +126,47 @@ def handle_outliers(
             processed_runs.append(group)
 
     return pd.concat(processed_runs)
+
+
+def get_pivot(
+    df: pd.DataFrame,
+    unique_col: str,
+    columns=["train/loss", "test/loss", "train/acc", "test/acc"],
+    reindex: bool = False,
+    interpolate: bool = False,
+):
+    # Create a pivot table with the data
+    pivot_table = pd.pivot_table(df, values=columns, index="_step", columns=unique_col)
+
+    if reindex:
+        # Fill in the missing values using linear interpolation and gaussian smoothing
+        pivot_table = pivot_table.reindex(np.arange(df._step.min(), df._step.max() + 1))
+
+    if interpolate:
+        # This will be used to fill in the missing values for the first few steps
+        pivot_table = pivot_table.interpolate(method="linear").fillna(method="bfill")
+
+    return pivot_table
+
+
+def extract_slice(df: pd.DataFrame, step: int, unique_col: str):
+    df.sort_values(by=unique_col, inplace=True)
+    pivot_table = get_pivot(df, unique_col, reindex=True, interpolate=True)
+    unique_vals = sorted(df[unique_col].unique())
+    slice_ = pivot_table.loc[step]
+
+    return unique_vals, slice_
+
+
+def extract_run(df: pd.DataFrame, **kwargs):
+    # Generate the 1x4 grid of Epoch-wise, Model-wise, Sample-wise, and Regularization-wise plots
+    # Epoch-wise
+    df.sort_values(by="_step", inplace=True)
+    run = df
+    for key, value in kwargs.items():
+        run = run.loc[run[key] == value]
+
+    run = run.set_index("_step")
+    steps = run.index.values
+
+    return steps, run
