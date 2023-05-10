@@ -1,5 +1,5 @@
 method: grid
-name: mnist-interpolation-0
+name: mnist-frac-train-0
 program: mnist.py
 project: mnist-grokking
 parameters:

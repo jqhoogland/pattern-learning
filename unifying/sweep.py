@@ -11,6 +11,8 @@ OutlierStrategy = Literal["remove", "replace", "keep"]
 def get_history(
     *sweep_ids,
     unique_cols: Union[List[str], str] = "weight_decay",
+    entity: str = "jqhoogland",
+    project: str = "grokking",
     allow_duplicates=False,
 ):
     """
@@ -24,7 +26,7 @@ def get_history(
 
     def _get_history(sweep_id):
         """Get a dataframe for a single sweep."""
-        sweep = api.sweep(f"jqhoogland/grokking/{sweep_id}")
+        sweep = api.sweep(f"{entity}/{project}/{sweep_id}")
         runs = sweep.runs
 
         def create_run_df(history, config):
