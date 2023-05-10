@@ -34,7 +34,7 @@ class Config:
     lr: float = 1e-3
     weight_decay: float = 1e-5
     use_sgd: bool = False
-    momentum: Union[float, Tuple[float, float]] = None  # type: ignore
+    momentum: Optional[Tuple[float, float]] = None  # type: ignore
 
     # Training
     num_training_steps: int = int(1e5)
@@ -76,14 +76,15 @@ class GrokkingConfig(Config):
     d_mlp: int = None  # 4 * d_model  # type: ignore
     d_head: int = None  # d_model // num_heads  # type: ignore
     num_ctx: int = 3
-    act_fn: Callable = F.relu
+    act_fn: Callable = "relu"  # type: ignore
     # use_ln: bool = True
 
     # Dataset
-    operator: Operator = "+"
+    operator: str = "+"  # Operator = "+"
     modulus: int = DEFAULT_MODULUS
     frac_label_noise: float = 0.0
     frac_train: float = 0.3
+    apply_noise_to_test: bool = False
 
     def __post_init__(self):
         if self.d_mlp is None:
@@ -206,6 +207,9 @@ class BaseLearner:
                 self.optimizer.step()
 
                 step += 1
+
+        metrics = self.validate()
+        wandb.log(metrics, step=step)
 
     def save(self, path: Optional[str]):
         path = path or f"{self.config.weights_dir}/{self.name}.pt"

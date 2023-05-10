@@ -1,19 +1,60 @@
 # Copied from [openai's implementation](https://github.com/openai/grok/blob/main/grok/data.py)
+import json
+import math
 import warnings
 from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union
 
 import blobfile as bf
 import numpy as np
 import torch
-from mod import Mod
-from sympy.combinatorics.permutations import Permutation
 from torch import LongTensor, Tensor
 from torch.utils.data import Dataset
 
 DEFAULT_MODULUS = 97
 DEFAULT_DATA_DIR = "data"
 
-Operator = Literal["/", "*", "+", "-"]
+Operator = Literal["/", "*", "+", "-", "^", "**"]
+
+
+def is_prime(n: int):
+    """Checks if a number is prime."""
+    return n > 1 and all(n % i for i in range(2, math.floor(math.sqrt(n))))
+
+
+def modular_exponentiation(base, exponent, modulus):
+    result = 1
+    base = base % modulus
+    while exponent > 0:
+        if exponent % 2 == 1:
+            result = (result * base) % modulus
+        exponent = exponent // 2
+        base = (base * base) % modulus
+    return result
+
+
+def modular_division(a, b, p):
+    b_inv = modular_exponentiation(b, p - 2, p)
+    return (a * b_inv) % p
+
+
+def draw_arithmetic_table(data, labels):
+    """Draws an arithmetic table using matshow"""
+    # Unique numbers in data[:, 0]
+    xs = np.array(sorted(list(set([x for x, _, _ in data]))))
+    ys = np.array(sorted(list(set([y for _, y, _ in data]))))
+
+    table = np.zeros((len(xs), len(ys)))
+
+    for (i, j, _), z in zip(data, labels):
+        table[i, j] = z
+
+    import matplotlib.pyplot as plt
+
+    plt.matshow(table)
+    plt.xticks(range(len(ys)), ys)
+    plt.yticks(range(len(xs)), xs)
+
+    plt.show()
 
 
 class ModularArithmetic(Dataset):
@@ -77,6 +118,8 @@ class ModularArithmetic(Dataset):
         """
         torch.manual_seed(seed)
 
+        assert is_prime(modulus), f"{modulus} is not prime"
+
         def apply(i, j, operator, modulus):
             if operator == "+":
                 return (i + j) % modulus
@@ -85,7 +128,9 @@ class ModularArithmetic(Dataset):
             elif operator == "*":
                 return (i * j) % modulus
             elif operator == "/":
-                return (i * j ** (modulus - 2)) % modulus
+                return modular_division(i, j, modulus)
+            elif operator == "^" or operator == "**":
+                return modular_exponentiation(i, j, modulus)
             else:
                 raise ValueError(f"Unknown operator {operator}")
 
@@ -97,13 +142,6 @@ class ModularArithmetic(Dataset):
             [apply(i, j, operator, modulus) for i, j in data[:, :2]],
             dtype=torch.long,
         )
-
-        # Apply label noise
-        if frac_label_noise > 0:
-            num_noise = int(frac_label_noise * len(data))
-            noise_from = torch.randperm(len(data))[:num_noise]
-            noise_to = noise_from.roll(1)
-            labels[noise_from] = labels[noise_to]
 
         if shuffle:
             permutation = torch.randperm(len(data))
@@ -118,9 +156,18 @@ class ModularArithmetic(Dataset):
             shuffle=shuffle,
         )
 
+        data, labels = cls.apply_noise(data, labels, frac_label_noise)
+
+        # draw_arithmetic_table(data, labels)
+
         return cls(data=data, labels=labels, metadata=metadata)
 
-    def split(self, frac_train: float = 0.8):
+    def split(
+        self,
+        frac_train: float = 0.8,
+        frac_label_noise: float = 0.0,
+        apply_noise_to_test: bool = False,
+    ):
         """
         Splits the dataset into a training and validation dataset.
 
@@ -134,13 +181,21 @@ class ModularArithmetic(Dataset):
         train_metadata = self.metadata.copy() | {"train": True}
         val_metadata = self.metadata.copy() | {"train": False}
 
+        train_set, train_labels = self.data[:train_len], self.labels[:train_len]
+        test_set, test_labels = self.data[train_len:], self.labels[train_len:]
+
+        train_set, train_labels = self.apply_noise(
+            train_set, train_labels, frac_label_noise=frac_label_noise
+        )
+
+        if apply_noise_to_test:
+            test_set, test_labels = self.apply_noise(
+                test_set, test_labels, frac_label_noise=frac_label_noise
+            )
+
         return (
-            ModularArithmetic(
-                self.data[:train_len], self.labels[:train_len], metadata=train_metadata
-            ),
-            ModularArithmetic(
-                self.data[train_len:], self.labels[train_len:], metadata=val_metadata
-            ),
+            ModularArithmetic(train_set, train_labels, metadata=train_metadata),
+            ModularArithmetic(test_set, test_labels, metadata=val_metadata),
         )
 
     @classmethod
@@ -152,6 +207,7 @@ class ModularArithmetic(Dataset):
         seed: int = 0,
         shuffle: bool = True,
         frac_train: float = 0.8,
+        apply_noise_to_test: bool = False,
     ):
         """
         A convenience method to generate a modular arithmetic datset and
@@ -164,15 +220,31 @@ class ModularArithmetic(Dataset):
                 "Shuffling is disabled. This will result in poorly separated training and validation sets."
             )
 
-        ds = cls.generate(
+        dataset = cls.generate(
             operator=operator,
             modulus=modulus,
-            frac_label_noise=frac_label_noise,
             seed=seed,
             shuffle=shuffle,
         )
 
-        return ds.split(frac_train=frac_train)
+        print(dataset)
+
+        return dataset.split(
+            frac_train=frac_train,
+            frac_label_noise=frac_label_noise,
+            apply_noise_to_test=apply_noise_to_test,
+        )
+
+    @staticmethod
+    def apply_noise(data, labels, frac_label_noise: float = 0.0):
+        # Apply label noise
+        if frac_label_noise > 0:
+            num_noise = int(frac_label_noise * len(data))
+            noise_from = torch.randperm(len(data))[:num_noise]
+            noise_to = noise_from.roll(1)
+            labels[noise_from] = labels[noise_to]
+
+        return data, labels
 
     def load_data(self, root: str) -> Tuple[Tensor, Tensor]:
         return torch.load(bf.join(root, "data.pt"))
@@ -192,3 +264,6 @@ class ModularArithmetic(Dataset):
 
     def __len__(self) -> int:
         return len(self.data)
+
+    def __repr__(self) -> str:
+        return f"ModularArithmetic({len(self)}, {self.metadata})"

@@ -9,6 +9,7 @@ attrs==22.2.0
 backcall==0.2.0
 beautifulsoup4==4.11.2
 bleach==6.0.0
+blobfile
 certifi==2022.12.7
 cffi==1.15.1
 charset-normalizer==3.1.0
