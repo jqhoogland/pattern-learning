@@ -1,7 +1,7 @@
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+sys.path.append(os.path.abspath(os.getcwd()))
 
 from contextlib import suppress
 from copy import deepcopy

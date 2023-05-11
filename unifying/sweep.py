@@ -8,6 +8,40 @@ import wandb
 OutlierStrategy = Literal["remove", "replace", "keep"]
 
 
+def generate_coarse_to_fine_grid_sweep(min_, max_, total_steps, step_sizes=[10, 5, 3, 1], type_="log"):
+    if type_ == "log":
+        # Generate the logscale range
+        grid = np.logspace(np.log10(min_), np.log10(max_), total_steps)
+    elif type_ == "linear":
+        grid = np.linspace(min_, max_, total_steps)
+    else:
+        grid = np.arange(min_, max_, int((max_ - min_) / total_steps))
+
+    # Initialize an empty list to store the rearranged elements
+    rearranged_grid = []
+
+    # Iterate over the step sizes and merge the sublists
+    for step in step_sizes:
+        for i in range(0, len(grid), step):
+            if grid[i] not in rearranged_grid:
+                rearranged_grid.append(grid[i])
+
+    return rearranged_grid
+
+
+def rearrange_coarse_to_fine(grid: List, step_sizes=[10, 5, 3, 1]):
+    # Initialize an empty list to store the rearranged elements
+    rearranged_grid = []
+
+    # Iterate over the step sizes and merge the sublists
+    for step in step_sizes:
+        for i in range(0, len(grid), step):
+            if grid[i] not in rearranged_grid:
+                rearranged_grid.append(grid[i])
+
+    return rearranged_grid
+
+
 def get_history(
     *sweep_ids,
     unique_cols: Union[List[str], str] = "weight_decay",
