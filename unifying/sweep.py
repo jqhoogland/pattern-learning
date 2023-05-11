@@ -191,7 +191,6 @@ def extract_slice(df: pd.DataFrame, step: int, unique_col: str):
 
     return unique_vals, slice_
 
-
 def extract_run(df: pd.DataFrame, **kwargs):
     # Generate the 1x4 grid of Epoch-wise, Model-wise, Sample-wise, and Regularization-wise plots
     # Epoch-wise
