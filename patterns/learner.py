@@ -57,6 +57,8 @@ class Config:
     seed: int = 0
     shuffle: bool = True
     data_seed: int = 0
+    frac_label_noise: float = 0.0   
+    apply_noise_to_test: bool = False
 
     def __post_init__(self):
         if self.no_logging:
@@ -82,7 +84,7 @@ class BaseLearner:
         self.testloader = testloader
         self.config = config
 
-        self.initial_weights = deepcopy(list(self.model.parameters()))
+        # self.initial_weights = deepcopy(list(self.model.parameters()))
     
     @classmethod
     def create(
@@ -105,10 +107,10 @@ class BaseLearner:
         raise NotImplementedError
 
     @staticmethod
-    def get_loader(config: Config, dataset: Dataset, train=True) -> DataLoader[Dataset]:
+    def get_loader(config: Config, dataset: Dataset, train=True) -> LabelNoiseDataLoader:
         return LabelNoiseDataLoader(
             dataset,
-            frac_label_noise=0.0 * (train or config.apply_noise_to_test),
+            frac_label_noise=config.frac_label_noise * float(train or config.apply_noise_to_test),
             batch_size=config.batch_size,
             shuffle=train,  
         )
@@ -222,13 +224,13 @@ class BaseLearner:
                     loss += self.criterion(y_hat, y, reduction="sum")
                     acc += self.accuracy(y_hat, y, reduction="sum")
 
-                    num_samples += len(x)
+                    num_samples += y.shape[0]
 
             if num_samples == 0:
                 return loss, acc
 
             loss /= num_samples
-            acc = acc / num_samples
+            acc /= num_samples
 
             return loss, acc
 
@@ -241,72 +243,72 @@ class BaseLearner:
 
             return norm_squared.sqrt()
 
-        def _dist_from_init(model):
-            distance = torch.zeros(1, dtype=torch.float64, device=self.config.device)
-            for p, p0 in zip(model.parameters(), self.initial_weights):
-                distance += (p - p0).norm().pow(2)
+        # def _dist_from_init(model):
+        #     distance = torch.zeros(1, dtype=torch.float64, device=self.config.device)
+        #     for p, p0 in zip(model.parameters(), self.initial_weights):
+        #         distance += (p - p0).norm().pow(2)
+        #
+        #     return distance.sqrt()
 
-            return distance.sqrt()
-
-        def _cos_sim_with_init(model):
-            cos_sim = torch.zeros(1, dtype=torch.float64, device=self.config.device)
-            norm1, norm2 = torch.zeros(
-                1, dtype=torch.float64, device=self.config.device
-            ), torch.zeros(1, dtype=torch.float64, device=self.config.device)
-
-            for p, p0 in zip(model.parameters(), self.initial_weights):
-                cos_sim += (p * p0).sum()
-                norm1 += p.norm().pow(2)
-                norm2 += p0.norm().pow(2)
-
-            return cos_sim / (norm1 * norm2).sqrt()
+        # def _cos_sim_with_init(model):
+        #     cos_sim = torch.zeros(1, dtype=torch.float64, device=self.config.device)
+        #     norm1, norm2 = torch.zeros(
+        #         1, dtype=torch.float64, device=self.config.device
+        #     ), torch.zeros(1, dtype=torch.float64, device=self.config.device)
+        #  
+        #     for p, p0 in zip(model.parameters(), self.initial_weights):
+        #         cos_sim += (p * p0).sum()
+        #         norm1 += p.norm().pow(2)
+        #         norm2 += p0.norm().pow(2)
+        #
+        #     return cos_sim / (norm1 * norm2).sqrt()
 
         train_loss, train_acc = _validate(self.trainloader)
         test_loss, test_acc = _validate(self.testloader)
 
         if self.config.frac_label_noise:
-            train_uncorrupted_loss, train_uncorrupted_acc = _validate(self.trainloader.uncorrupted)
+            # train_uncorrupted_loss, train_uncorrupted_acc = _validate(self.trainloader.uncorrupted)
             train_corrupted_loss, train_corrupted_acc = _validate(self.trainloader.corrupted)
-            train_original_loss, train_original_acc = _validate(self.trainloader.original)
-            test_uncorrupted_loss, test_uncorrupted_acc = _validate(self.testloader.uncorrupted)
-            test_corrupted_loss, test_corrupted_acc = _validate(self.testloader.corrupted)
-            test_original_loss, test_original_acc = _validate(self.testloader.original)
+            # train_original_loss, train_original_acc = _validate(self.trainloader.original)
+            # test_uncorrupted_loss, test_uncorrupted_acc = _validate(self.testloader.uncorrupted)
+            # test_corrupted_loss, test_corrupted_acc = _validate(self.testloader.corrupted)
+            # test_original_loss, test_original_acc = _validate(self.testloader.original)
         else:
-            train_uncorrupted_loss, train_uncorrupted_acc = train_loss, train_acc
+            # train_uncorrupted_loss, train_uncorrupted_acc = train_loss, train_acc
             train_corrupted_loss, train_corrupted_acc = torch.zeros(1, dtype=torch.float64, device=self.config.device), torch.zeros(1, dtype=torch.float64, device=self.config.device)
-            train_original_loss, train_original_acc = train_loss, train_acc
-            test_uncorrupted_loss, test_uncorrupted_acc = test_loss, test_acc
-            test_corrupted_loss, test_corrupted_acc = torch.zeros(1, dtype=torch.float64, device=self.config.device), torch.zeros(1, dtype=torch.float64, device=self.config.device)
-            test_original_loss, test_original_acc = test_loss, test_acc
+            # train_original_loss, train_original_acc = train_loss, train_acc
+            # test_uncorrupted_loss, test_uncorrupted_acc = test_loss, test_acc
+            # test_corrupted_loss, test_corrupted_acc = torch.zeros(1, dtype=torch.float64, device=self.config.device), torch.zeros(1, dtype=torch.float64, device=self.config.device)
+            # test_original_loss, test_original_acc = test_loss, test_acc
 
         weight_norm = _weight_norm(self.model)
-        dist_from_init = _dist_from_init(self.model)
-        cos_sim_with_init = _cos_sim_with_init(self.model)
+        # dist_from_init = _dist_from_init(self.model)
+        # cos_sim_with_init = _cos_sim_with_init(self.model)
 
         # Efficiency is logprob of the correct label divided by the norm of the weights
 
         return {
             "train/loss": train_loss.item(),
             "train/acc": train_acc.item(),
-            "train/efficiency": (train_loss / weight_norm).item(),
+            # "train/efficiency": (train_loss / weight_norm).item(),
             "test/loss": test_loss.item(),
             "test/acc": test_acc.item(),
-            "test/efficiency": (test_loss / weight_norm).item(),
+            # "test/efficiency": (test_loss / weight_norm).item(),
             "weight/norm": weight_norm.item(),
-            "weight/dist_from_init": dist_from_init.item(),
-            "weight/cos_sim_with_init": cos_sim_with_init.item(),
-            "train/uncorrupted/loss": train_uncorrupted_loss.item(),
-            "train/uncorrupted/acc": train_uncorrupted_acc.item(),
+            # "weight/dist_from_init": dist_from_init.item(),
+            # "weight/cos_sim_with_init": cos_sim_with_init.item(),
+            # "train/uncorrupted/loss": train_uncorrupted_loss.item(),
+            # "train/uncorrupted/acc": train_uncorrupted_acc.item(),
             "train/corrupted/loss": train_corrupted_loss.item(),
             "train/corrupted/acc": train_corrupted_acc.item(),
-            "train/original/loss": train_original_loss.item(),
-            "train/original/acc": train_original_acc.item(),
-            "test/uncorrupted/loss": test_uncorrupted_loss.item(),
-            "test/uncorrupted/acc": test_uncorrupted_acc.item(),
-            "test/corrupted/loss": test_corrupted_loss.item(),
-            "test/corrupted/acc": test_corrupted_acc.item(),
-            "test/original/loss": test_original_loss.item(),
-            "test/original/acc": test_original_acc.item(),
+            # "train/original/loss": train_original_loss.item(),
+            # "train/original/acc": train_original_acc.item(),
+            # "test/uncorrupted/loss": test_uncorrupted_loss.item(),
+            # "test/uncorrupted/acc": test_uncorrupted_acc.item(),
+            # "test/corrupted/loss": test_corrupted_loss.item(),
+            # "test/corrupted/acc": test_corrupted_acc.item(),
+            # "test/original/loss": test_original_loss.item(),
+            # "test/original/acc": test_original_acc.item(),
         }
 
     @classmethod

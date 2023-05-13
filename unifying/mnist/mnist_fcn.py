@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 from tqdm.notebook import tqdm
+from argparse_dataclass import ArgumentParser
 
 import wandb
 from patterns.learner import BaseLearner,  Reduction
@@ -73,6 +74,7 @@ class MLP(ExtModule):
     def parameter_groups(self):
         return [l.parameters() for l in self.layers if isinstance(l, nn.Linear)]
 
+
 @dataclass
 class MNISTConfig(VisionConfig):
     # Model
@@ -121,16 +123,17 @@ PROJECT = "mnist-grokking"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DEFAULT_MNIST_CONFIG = MNISTConfig(
     wandb_project=PROJECT,
-    frac_train=1.0,
-    frac_label_noise=0.0,
+    frac_train=.0167,
+    frac_label_noise=0.1,
     batch_size=200,  # 1000 / 200 = 5 steps per epoch
     num_training_steps=50_000,  # = 10,000 epochs
     # num_training_steps=int(1e6), #  = 200,000 epochs
-    num_layers=2,
+    num_layers=5,
     width=200,
     init_mode="uniform",
-    init_scale=1.0,
-    lr=1e-3,
+    init_scale=4.0,
+    max_lr=0.02,
+    lr_factor=6,
     weight_decay=1e-2,
     seed=0,
     device=DEVICE,
@@ -138,12 +141,20 @@ DEFAULT_MNIST_CONFIG = MNISTConfig(
     # criterion="mse"
 )
 
+""" parser = ArgumentParser(MNISTConfig)
+
+try:
+    default_config = parser.parse_args()
+except:
+ """
+default_config = DEFAULT_MNIST_CONFIG
+
 
 def main():
     # Logging
     with wandb_run(
         project=PROJECT,
-        config=asdict(DEFAULT_MNIST_CONFIG),
+        config=asdict(default_config),
     ):
         config = MNISTConfig(**wandb.config)
         learner = MNISTLearner.create(

@@ -253,11 +253,15 @@ class LabelNoiseDataLoader(DataLoader):
 
         # Create a copy of the dataset with noise applied
         data, labels = original_dataset.data.clone(), original_dataset.targets.clone()
+
+        # Change data to float32
+        data = data.float()
+        
         data, labels, _, corrupt_indices = self.apply_noise(data, labels, frac_label_noise=frac_label_noise)
         dataset = TensorDataset(data, labels)         
 
         # Create subset of samples in dataset without noise
-        uncorrupted_indices = torch.tensor([i for i in range(len(dataset)) if i not in corrupt_indices], dtype=torch.long)
+        uncorrupted_indices = [i for i in range(len(dataset)) if i not in corrupt_indices]
         uncorrupted_subset = Subset(dataset, uncorrupted_indices)
         self.uncorrupted = DataLoader(uncorrupted_subset, **kwargs)
 
@@ -270,7 +274,7 @@ class LabelNoiseDataLoader(DataLoader):
             self.corrupted = DataLoader(corrupted_subset, **kwargs)
 
         super().__init__(dataset, **kwargs)
-
+    
     @staticmethod
     def apply_noise(data, true_targets, frac_label_noise: float = 0.0):
         # Apply label noise

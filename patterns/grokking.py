@@ -33,9 +33,7 @@ class GrokkingConfig(Config):
     # Dataset
     operator: str = "+"  # Operator = "+"
     modulus: int = DEFAULT_MODULUS
-    frac_label_noise: float = 0.0
-    frac_train: float = 0.3
-    apply_noise_to_test: bool = False
+    frac_train: float = 0.4
 
     def __post_init__(self):
         if self.d_mlp is None:
@@ -57,7 +55,6 @@ class GrokkingConfig(Config):
                 self.act_fn = F.relu
 
         super().__post_init__()
-
 
 
 class GrokkingLearner(BaseLearner):
