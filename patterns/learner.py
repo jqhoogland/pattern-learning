@@ -22,7 +22,6 @@ Reduction = Literal["mean", "sum"]
 def sup_distance(d1: dict, d2: dict):
     return max(abs(d1[k] - d2[k]) for k in d1)
 
-
 @dataclass
 class Config:
     load_path: Optional[str] = None
@@ -35,6 +34,8 @@ class Config:
     weight_decay: float = 1e-5
     use_sgd: bool = False
     momentum: Optional[Tuple[float, float]] = None  # type: ignore
+    lr_factor: float = 1.
+    max_lr: Optional[float] = None
 
     # Training
     num_training_steps: int = int(1e5)
@@ -56,6 +57,7 @@ class Config:
 
     seed: int = 0
     shuffle: bool = True
+    data_seed: int = 0
 
     def __post_init__(self):
         if self.no_logging:
@@ -138,10 +140,6 @@ class BaseLearner:
 
     @classmethod
     def get_model(cls, config: Config) -> nn.Module:
-        raise NotImplementedError
-
-    @classmethod
-    def get_optimizer(cls, config: Config, model: nn.Module) -> optim.Optimizer:
         raise NotImplementedError
 
     @property
@@ -310,17 +308,44 @@ class BaseLearner:
         }
 
     @classmethod
+    def get_parameter_groups(cls, config: Config, model: nn.Module):
+        if hasattr(model, "parameter_groups"):
+            groups = model.parameter_groups()
+
+            lr = config.lr
+            lrs = [lr * (config.lr_factor ** i) for i in range(len(groups))]
+
+            if config.max_lr: 
+                # Rescale learning rate so that the maximum learning rate is config.max_lr
+                max_lr = max(lrs)   
+                factor = config.max_lr / max_lr
+                lrs = [lr * factor for lr in lrs]
+
+            print(f"Learning rates for parameter groups: {lrs}")
+
+            return [{"params": g, "lr": lr} for g, lr in zip(groups, lrs)]
+        elif config.lr_factor != 1.0:
+            warnings.warn(
+                "lr_factor is set but model does not have a parameter_groups method. "
+                "lr_factor will be ignored."
+            )
+        
+        return model.parameters()
+
+    @classmethod
     def get_optimizer(cls, config: Config, model: nn.Module) -> optim.Optimizer:
+        parameter_groups = cls.get_parameter_groups(config, model)
+
         if config.use_sgd and isinstance(config.momentum, float):
             optimizer = optim.SGD(
-                model.parameters(),
+                parameter_groups,
                 lr=config.lr,
                 weight_decay=config.weight_decay,
                 momentum=config.momentum,
             )
         elif isinstance(config.momentum, (list, tuple)):
             optimizer = optim.AdamW(
-                model.parameters(),
+                parameter_groups,
                 lr=config.lr,
                 weight_decay=config.weight_decay,
                 betas=config.momentum,

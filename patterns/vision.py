@@ -41,6 +41,7 @@ class VisionConfig(Config):
     # Dataset
     frac_train: float = 0.2
     frac_label_noise: float = 0.0
+    apply_noise_to_test: bool = False
 
 
 class VisionLearner(BaseLearner):
@@ -57,6 +58,8 @@ class VisionLearner(BaseLearner):
         torch.manual_seed(config.seed)
         model = cls.get_model(config)
         optimizer = cls.get_optimizer(config, model)
+
+        torch.manual_seed(config.data_seed)
         trainloader = cls.get_loader(config, trainset)
         testloader = cls.get_loader(config, testset, train=False)
         return cls(model, optimizer, config, trainloader, testloader)
@@ -79,7 +82,7 @@ class VisionLearner(BaseLearner):
 
             return dataset
 
-        if config.frac_label_noise > 0.0:
+        if config.frac_label_noise > 0.0 and (train or config.apply_noise_to_test):
             dataset = add_label_noise(dataset, config.frac_label_noise)
 
         if config.frac_train < 1.0:  # Always applied

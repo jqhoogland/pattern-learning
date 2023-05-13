@@ -57,7 +57,7 @@ def main():
         operator=config.operator,
         modulus=config.modulus,
         frac_label_noise=config.frac_label_noise,
-        seed=config.seed,
+        seed=config.data_seed,
         shuffle=config.shuffle,
         frac_train=config.frac_train,
         apply_noise_to_test=config.apply_noise_to_test,

@@ -33,13 +33,19 @@ def rescale_run(run, new_max=1.0, log=True):
 
 
 class Pattern(nn.Module):
-    def __init__(self, max_time: float = 1.0):
+    def __init__(self, max_time: float = 1.0, onset: Optional[float] = None, generalization: Optional[float] = None, strength: Optional[float] = None, speed: Optional[float] = None):
         # 4 scalar parameters: strength, speed, onset, generalization
         super().__init__()
-        self.strength = nn.Parameter(torch.rand(1)[0])
-        self.speed = nn.Parameter(torch.rand(1)[0] * 10 / max_time)
-        self.onset = nn.Parameter(torch.rand(1)[0] * max_time)
-        self.generalization = nn.Parameter(torch.rand(1)[0])
+
+        strength = strength or torch.rand(1)[0]
+        speed = speed or torch.rand(1)[0] * 10 / max_time
+        onset = onset or torch.rand(1)[0] * max_time
+        generalization = generalization or torch.rand(1)[0]
+
+        self.strength = nn.Parameter(torch.tensor(strength))
+        self.speed = nn.Parameter(torch.tensor(speed))
+        self.onset = nn.Parameter(torch.tensor(onset))
+        self.generalization = nn.Parameter(torch.tensor(generalization))
 
     def forward(self, t):
         return self.strength * F.sigmoid(self.speed * (t - self.onset))
@@ -52,7 +58,17 @@ class PatternLearningModel(nn.Module):
     def __init__(self, num_patterns: int = 3, max_time=1.0):
         super().__init__()
         self.num_patterns = num_patterns
-        self.patterns = nn.ModuleList([Pattern(max_time) for _ in range(num_patterns)])
+        self.patterns = nn.ModuleList([
+            Pattern(
+                max_time, 
+                onset=max_time * (i + 1) / (num_patterns + 1),
+                speed=1.,
+                generalization=0.5,
+                strength=0.5
+            ) 
+            for i in range(num_patterns)
+        ])
+        self.max_time = max_time
 
         self.binary_mask = torch.tensor(
             [
@@ -123,7 +139,7 @@ class PatternLearningModel(nn.Module):
     def test(self, t):
         return torch.sum(self.generalizations() * self.usages(t), dim=0)
 
-    def fit(self, run, lr=0.1, num_epochs=1000):
+    def fit(self, run, lr=0.1, num_epochs=1000, callback=None, callback_ivl=100):
         ts = torch.tensor(run._step.values).float()
 
         train_ys = torch.tensor(run["train/acc"].values).float()
@@ -151,6 +167,9 @@ class PatternLearningModel(nn.Module):
 
             if epoch < 10 or epoch % 10 == 0:
                 print(f"Epoch {epoch} - loss: {loss.item()}")
+            
+            if callback is not None and epoch % callback_ivl == 0:
+                callback(self)
 
         return self
 
@@ -166,48 +185,16 @@ class PatternLearningModel(nn.Module):
             d[f"pattern_{i}/generalization"] = p.generalization.data
 
         return d
+    
+    def rescale(self, max_time):
+        """Rescale the model to a new max time"""
+        scaling_factor = max_time / self.max_time
+
+        for p in self.patterns:
+            p.onset.data /= scaling_factor
+            p.speed.data *= scaling_factor
+
+        self.max_time = max_time
 
     def __repr__(self):
         return f"PatternLearningModel({self.to_dict()})"
-
-
-VARIABLE_COLS = [
-    "test/acc",
-    "train/acc",
-    "test/loss",
-    "train/loss",
-    "_step",
-    "weight/norm",
-    "test/efficiency",
-    "train/efficiency",
-    "weight/dist_from_init",
-    "weight/cos_sim_with_init",
-]
-
-
-def fit_sweep(df: pd.DataFrame, unique_col: str, lr=0.1, max_time=1.0, num_patterns=3):
-    unique_vals = df.unique_col.unique()
-    # Take a random row ignoring unique_col, "test/acc", "train/acc", "test/loss", "train/loss", etc.
-    hyperparams: dict = (
-        df.loc[0, :]
-        .drop(columns=[unique_col, *VARIABLE_COLS])
-        .to_dict(orient="records")[0]
-    )
-
-    wandb.init(
-        project="fit-toy-model",
-    )
-
-    try:
-        for unique_val in unique_vals:
-            run = df.loc[df[unique_col] == unique_val]
-            rescaled_run = rescale_run(run, new_max=max_time)
-            pl_model = PatternLearningModel(
-                num_patterns=num_patterns, max_time=max_time
-            )
-
-            pl_model.fit(rescaled_run, lr=lr, num_epochs=500)
-            wandb.log({**pl_model.to_dict(), **hyperparams})
-
-    except KeyboardInterrupt:
-        wandb.finish()

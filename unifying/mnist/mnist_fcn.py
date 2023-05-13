@@ -71,6 +71,8 @@ class MLP(ExtModule):
     def forward(self, x):
         return self.layers(x)
 
+    def parameter_groups(self):
+        return [l.parameters() for l in self.layers]
 
 @dataclass
 class MNISTConfig(VisionConfig):
@@ -93,7 +95,7 @@ class MNISTLearner(VisionLearner):
             num_classes=config.num_classes,
             width=config.width,
             init_scale=config.init_scale,
-            init_mode=config.init_mode,
+            init_mode=config.init_mode, # "uniform",                    
         )
 
         if config.load_path is not None:
