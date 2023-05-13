@@ -6,15 +6,14 @@ from typing import Callable, Literal, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm.notebook import tqdm
 
 import wandb
-from patterns.dataset import ModularArithmetic, Operator
+from patterns.dataset import ModularArithmetic, Operator, LabelNoiseDataLoader
 from patterns.transformer import Transformer
 from patterns.utils import generate_run_name
 
-DEFAULT_MODULUS = 113
 
 Reduction = Literal["mean", "sum"]
 
@@ -68,48 +67,6 @@ class Config:
             self.device = torch.device(self.device)
 
 
-@dataclass
-class GrokkingConfig(Config):
-    # Model
-    num_layers: int = 1
-    num_heads: int = 4
-    d_model: int = 128
-    d_vocab: Optional[int] = None
-    d_mlp: int = None  # 4 * d_model  # type: ignore
-    d_head: int = None  # d_model // num_heads  # type: ignore
-    num_ctx: int = 3
-    act_fn: Callable = "relu"  # type: ignore
-    # use_ln: bool = True
-
-    # Dataset
-    operator: str = "+"  # Operator = "+"
-    modulus: int = DEFAULT_MODULUS
-    frac_label_noise: float = 0.0
-    frac_train: float = 0.3
-    apply_noise_to_test: bool = False
-
-    def __post_init__(self):
-        if self.d_mlp is None:
-            self.d_mlp = 4 * self.d_model
-        if self.d_head is None:
-            self.d_head = self.d_model // self.num_heads
-        if self.batch_size == -1:
-            self.batch_size = int((self.modulus * self.modulus) * self.frac_train)
-        if self.d_vocab is None:
-            self.d_vocab = self.modulus + 1
-
-        if isinstance(self.act_fn, str):
-            try:
-                self.act_fn = getattr(F, self.act_fn)
-            except AttributeError:
-                warnings.warn(
-                    f"Could not find activation function {self.act_fn}, falling back to ReLU"
-                )
-                self.act_fn = F.relu
-
-        super().__post_init__()
-
-
 class BaseLearner:
     def __init__(
         self,
@@ -126,21 +83,35 @@ class BaseLearner:
         self.config = config
 
         self.initial_weights = deepcopy(list(self.model.parameters()))
-
+    
     @classmethod
     def create(
         cls,
         config: Config,
-        trainloader: DataLoader,
-        testloader: DataLoader,
+        trainset: Dataset,
+        testset: Dataset,
     ) -> "BaseLearner":
+        torch.manual_seed(config.seed)
         model = cls.get_model(config)
         optimizer = cls.get_optimizer(config, model)
+
+        torch.manual_seed(config.data_seed)
+        trainloader = cls.get_loader(config, trainset)
+        testloader = cls.get_loader(config, testset, train=False)
         return cls(model, optimizer, config, trainloader, testloader)
 
     @classmethod
     def get_model(cls, config: Config) -> nn.Module:
         raise NotImplementedError
+
+    @staticmethod
+    def get_loader(config: Config, dataset: Dataset, train=True) -> DataLoader[Dataset]:
+        return LabelNoiseDataLoader(
+            dataset,
+            frac_label_noise=0.0 * (train or config.apply_noise_to_test),
+            batch_size=config.batch_size,
+            shuffle=train,  
+        )
 
     @property
     def name(self):
@@ -251,7 +222,10 @@ class BaseLearner:
                     loss += self.criterion(y_hat, y, reduction="sum")
                     acc += self.accuracy(y_hat, y, reduction="sum")
 
-                    num_samples += y.shape[0]
+                    num_samples += len(x)
+
+            if num_samples == 0:
+                return loss, acc
 
             loss /= num_samples
             acc = acc / num_samples
@@ -289,6 +263,22 @@ class BaseLearner:
 
         train_loss, train_acc = _validate(self.trainloader)
         test_loss, test_acc = _validate(self.testloader)
+
+        if self.config.frac_label_noise:
+            train_uncorrupted_loss, train_uncorrupted_acc = _validate(self.trainloader.uncorrupted)
+            train_corrupted_loss, train_corrupted_acc = _validate(self.trainloader.corrupted)
+            train_original_loss, train_original_acc = _validate(self.trainloader.original)
+            test_uncorrupted_loss, test_uncorrupted_acc = _validate(self.testloader.uncorrupted)
+            test_corrupted_loss, test_corrupted_acc = _validate(self.testloader.corrupted)
+            test_original_loss, test_original_acc = _validate(self.testloader.original)
+        else:
+            train_uncorrupted_loss, train_uncorrupted_acc = train_loss, train_acc
+            train_corrupted_loss, train_corrupted_acc = torch.zeros(1, dtype=torch.float64, device=self.config.device), torch.zeros(1, dtype=torch.float64, device=self.config.device)
+            train_original_loss, train_original_acc = train_loss, train_acc
+            test_uncorrupted_loss, test_uncorrupted_acc = test_loss, test_acc
+            test_corrupted_loss, test_corrupted_acc = torch.zeros(1, dtype=torch.float64, device=self.config.device), torch.zeros(1, dtype=torch.float64, device=self.config.device)
+            test_original_loss, test_original_acc = test_loss, test_acc
+
         weight_norm = _weight_norm(self.model)
         dist_from_init = _dist_from_init(self.model)
         cos_sim_with_init = _cos_sim_with_init(self.model)
@@ -305,6 +295,18 @@ class BaseLearner:
             "weight/norm": weight_norm.item(),
             "weight/dist_from_init": dist_from_init.item(),
             "weight/cos_sim_with_init": cos_sim_with_init.item(),
+            "train/uncorrupted/loss": train_uncorrupted_loss.item(),
+            "train/uncorrupted/acc": train_uncorrupted_acc.item(),
+            "train/corrupted/loss": train_corrupted_loss.item(),
+            "train/corrupted/acc": train_corrupted_acc.item(),
+            "train/original/loss": train_original_loss.item(),
+            "train/original/acc": train_original_acc.item(),
+            "test/uncorrupted/loss": test_uncorrupted_loss.item(),
+            "test/uncorrupted/acc": test_uncorrupted_acc.item(),
+            "test/corrupted/loss": test_corrupted_loss.item(),
+            "test/corrupted/acc": test_corrupted_acc.item(),
+            "test/original/loss": test_original_loss.item(),
+            "test/original/acc": test_original_acc.item(),
         }
 
     @classmethod
@@ -317,8 +319,7 @@ class BaseLearner:
 
             if config.max_lr: 
                 # Rescale learning rate so that the maximum learning rate is config.max_lr
-                max_lr = max(lrs)   
-                factor = config.max_lr / max_lr
+                factor = config.max_lr / max(lrs)
                 lrs = [lr * factor for lr in lrs]
 
             print(f"Learning rates for parameter groups: {lrs}")
@@ -354,65 +355,3 @@ class BaseLearner:
             raise ValueError(f"Invalid momentum configuration {config.momentum}")
 
         return optimizer
-
-
-class GrokkingLearner(BaseLearner):
-    Config = GrokkingConfig
-
-    @classmethod
-    def get_model(cls, config: Config) -> nn.Module:
-        model = Transformer(
-            num_layers=config.num_layers,
-            num_heads=config.num_heads,
-            d_model=config.d_model,
-            d_vocab=config.d_vocab,
-            d_mlp=config.d_mlp,
-            d_head=config.d_head,
-            num_ctx=config.num_ctx,
-            act_fn=config.act_fn,
-        )
-
-        if config.load_path is not None:
-            model.load_state_dict(torch.load(config.load_path))
-
-        model.to(config.device)
-
-        num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print(f"Model has {num_params} trainable parameters")
-
-        return model
-
-    @staticmethod
-    def criterion(outputs, targets, reduction: Reduction = "sum"):
-        """
-        Wrapper around cross entropy loss because we only care about the last number predicted.
-        """
-        # Only look at predictions of last numbers
-        outputs = outputs[:, -1]
-
-        # Compute individual and summed losses for final number
-        logprobs = F.log_softmax(outputs.to(torch.float64), dim=-1)
-        prediction_logprobs = torch.gather(logprobs, index=targets.unsqueeze(1), dim=-1)
-
-        if reduction == "mean":
-            loss = -torch.mean(prediction_logprobs)
-        elif reduction == "sum":
-            loss = -torch.sum(prediction_logprobs)
-        else:
-            raise ValueError("Invalid reduction argument.")
-
-        return loss
-
-    @staticmethod
-    def accuracy(outputs, targets, reduction: Reduction = "sum"):
-        y_pred = outputs.argmax(dim=-1)[:, -1].detach()
-        acc = y_pred == targets
-
-        if reduction == "mean":
-            acc = torch.mean(acc)
-        elif reduction == "sum":
-            acc = torch.sum(acc)
-        elif reduction != "none":
-            raise ValueError("Invalid reduction argument.")
-
-        return acc

@@ -2,13 +2,13 @@
 import json
 import math
 import warnings
-from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union
+from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union, Protocol
 
 import blobfile as bf
 import numpy as np
 import torch
 from torch import LongTensor, Tensor
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset, DataLoader, TensorDataset
 
 DEFAULT_MODULUS = 97
 DEFAULT_DATA_DIR = "data"
@@ -71,7 +71,6 @@ class ModularArithmetic(Dataset):
     class Metadata(TypedDict, total=False):
         operator: Operator
         modulus: int
-        frac_label_noise: float
         seed: int
         shuffle: bool
         train: Optional[bool]
@@ -81,6 +80,7 @@ class ModularArithmetic(Dataset):
         data: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         root: Optional[str] = None,
+        wrong_indices: Optional[torch.Tensor] = None,
         metadata: Metadata = {},
     ) -> None:
         """
@@ -93,7 +93,7 @@ class ModularArithmetic(Dataset):
             raise ValueError("Must provide either data or root")
 
         self.data = data
-        self.labels = labels
+        self.targets = labels
         self.root = root
         self.metadata = metadata
 
@@ -102,7 +102,6 @@ class ModularArithmetic(Dataset):
         cls,
         operator: Operator = "+",
         modulus: int = DEFAULT_MODULUS,
-        frac_label_noise: float = 0.0,
         seed: int = 0,
         shuffle: bool = True,
     ):
@@ -111,7 +110,6 @@ class ModularArithmetic(Dataset):
 
         :param operator: the operator to use in the equations
         :param modulus: the modulus to use in the equations
-        :param frac_label_noise: the fraction of labels to flip
         :param seed: the random seed to use
         :param shuffle: if true, shuffles the data
         :returns: a dataset of modular arithmetic equations
@@ -151,22 +149,16 @@ class ModularArithmetic(Dataset):
         metadata = cls.Metadata(
             operator=operator,
             modulus=modulus,
-            frac_label_noise=frac_label_noise,
             seed=seed,
             shuffle=shuffle,
         )
 
-        data, labels = cls.apply_noise(data, labels, frac_label_noise)
-
-        # draw_arithmetic_table(data, labels)
 
         return cls(data=data, labels=labels, metadata=metadata)
 
     def split(
         self,
         frac_train: float = 0.8,
-        frac_label_noise: float = 0.0,
-        apply_noise_to_test: bool = False,
     ):
         """
         Splits the dataset into a training and validation dataset.
@@ -181,17 +173,8 @@ class ModularArithmetic(Dataset):
         train_metadata = self.metadata.copy() | {"train": True}
         val_metadata = self.metadata.copy() | {"train": False}
 
-        train_set, train_labels = self.data[:train_len], self.labels[:train_len]
-        test_set, test_labels = self.data[train_len:], self.labels[train_len:]
-
-        train_set, train_labels = self.apply_noise(
-            train_set, train_labels, frac_label_noise=frac_label_noise
-        )
-
-        if apply_noise_to_test:
-            test_set, test_labels = self.apply_noise(
-                test_set, test_labels, frac_label_noise=frac_label_noise
-            )
+        train_set, train_labels = self.data[:train_len], self.targets[:train_len]
+        test_set, test_labels = self.data[train_len:], self.targets[train_len:]
 
         return (
             ModularArithmetic(train_set, train_labels, metadata=train_metadata),
@@ -203,11 +186,9 @@ class ModularArithmetic(Dataset):
         cls,
         operator: Operator = "+",
         modulus: int = DEFAULT_MODULUS,
-        frac_label_noise: float = 0.0,
         seed: int = 0,
         shuffle: bool = True,
         frac_train: float = 0.8,
-        apply_noise_to_test: bool = False,
     ):
         """
         A convenience method to generate a modular arithmetic datset and
@@ -231,39 +212,76 @@ class ModularArithmetic(Dataset):
 
         return dataset.split(
             frac_train=frac_train,
-            frac_label_noise=frac_label_noise,
-            apply_noise_to_test=apply_noise_to_test,
         )
 
-    @staticmethod
-    def apply_noise(data, labels, frac_label_noise: float = 0.0):
-        # Apply label noise
-        if frac_label_noise > 0:
-            num_noise = int(frac_label_noise * len(data))
-            noise_from = torch.randperm(len(data))[:num_noise]
-            noise_to = noise_from.roll(1)
-            labels[noise_from] = labels[noise_to]
-
-        return data, labels
 
     def load_data(self, root: str) -> Tuple[Tensor, Tensor]:
         return torch.load(bf.join(root, "data.pt"))
 
     def save_data(self, root: str):
-        torch.save((self.data, self.labels), bf.join(root, "data.pt"))
+        torch.save((self.data, self.targets), bf.join(root, "data.pt"))
 
     def __getitem__(self, index: int) -> Tuple[Tensor, Tensor]:
         """
         :param index: the index of the equation
         :returns: the equation at that index
         """
-        return self.data[index], self.labels[index]
+        return self.data[index], self.targets[index]
 
     def __iter__(self):
-        return zip(self.data, self.labels)
+        return zip(self.data, self.targets)
 
     def __len__(self) -> int:
         return len(self.data)
 
     def __repr__(self) -> str:
         return f"ModularArithmetic({len(self)}, {self.metadata})"
+
+
+class LabelNoiseConfig(Protocol):
+    batch_size: int
+    num_workers: int
+    frac_label_noise: float
+    apply_noise_to_test: bool
+
+
+class LabelNoiseDataLoader(DataLoader):
+
+    def __init__(self, original_dataset: Dataset, frac_label_noise: float,  **kwargs) -> None:
+        self.frac_label_noise = frac_label_noise
+        self.original = DataLoader(original_dataset, **kwargs)
+
+        # Create a copy of the dataset with noise applied
+        data, labels = original_dataset.data.clone(), original_dataset.targets.clone()
+        data, labels, _, corrupt_indices = self.apply_noise(data, labels, frac_label_noise=frac_label_noise)
+        dataset = TensorDataset(data, labels)         
+
+        # Create subset of samples in dataset without noise
+        uncorrupted_indices = torch.tensor([i for i in range(len(dataset)) if i not in corrupt_indices], dtype=torch.long)
+        uncorrupted_subset = Subset(dataset, uncorrupted_indices)
+        self.uncorrupted = DataLoader(uncorrupted_subset, **kwargs)
+
+        # Create subset of samples in dataset with noise
+        corrupted_subset = Subset(dataset, corrupt_indices)
+
+        if not frac_label_noise:
+            self.corrupted = []
+        else:
+            self.corrupted = DataLoader(corrupted_subset, **kwargs)
+
+        super().__init__(dataset, **kwargs)
+
+    @staticmethod
+    def apply_noise(data, true_targets, frac_label_noise: float = 0.0):
+        # Apply label noise
+        labels = true_targets.clone()
+
+        if frac_label_noise > 0:
+            num_noise = int(frac_label_noise * len(data))
+            corrupt_indices = torch.randperm(len(data))[:num_noise]
+            noise_to = corrupt_indices.roll(1)
+            true_targets[corrupt_indices] = true_targets[noise_to]
+        else:
+            corrupt_indices = torch.tensor([], dtype=torch.long)
+
+        return data, labels, true_targets, corrupt_indices

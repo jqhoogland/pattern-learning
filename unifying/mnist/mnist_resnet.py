@@ -21,8 +21,7 @@ from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 from tqdm.notebook import tqdm
 
 import wandb
-from patterns.dataset import ModularArithmetic, Operator
-from patterns.learner import BaseLearner, GrokkingConfig, GrokkingLearner, Reduction
+from patterns.learner import BaseLearner, Reduction
 from patterns.transformer import Transformer
 from patterns.utils import generate_run_name, wandb_run
 from patterns.vision import ExtModule, VisionConfig, VisionLearner
@@ -163,20 +162,6 @@ class ResNetConfig(VisionConfig):
 class ResNetLearner(VisionLearner):
     Config = ResNetConfig
     Dataset = Union[Dataset, Subset[Dataset]]
-
-    @classmethod
-    def create(
-        cls,
-        config: Config,
-        trainset: Dataset,
-        testset: Dataset,
-    ) -> "ResNetLearner":
-        torch.manual_seed(config.seed)
-        model = cls.get_model(config)
-        optimizer = cls.get_optimizer(config, model)
-        trainloader = cls.get_loader(config, trainset)
-        testloader = cls.get_loader(config, testset, train=False)
-        return cls(model, optimizer, config, trainloader, testloader)
 
     @classmethod
     def get_model(cls, config: Config) -> nn.Module:

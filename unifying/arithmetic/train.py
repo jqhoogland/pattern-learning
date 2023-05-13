@@ -21,7 +21,7 @@ from tqdm import tqdm
 
 import wandb
 from patterns.dataset import ModularArithmetic, Operator
-from patterns.learner import GrokkingConfig, GrokkingLearner
+from patterns.grokking import GrokkingConfig, GrokkingLearner
 from patterns.transformer import Transformer
 from patterns.utils import generate_run_name
 
@@ -52,26 +52,8 @@ def main():
     print("\nConfig:")
     print(yaml.dump(asdict(config), default_flow_style=False))
 
-    # Dataset
-    train_dataset, val_dataset = ModularArithmetic.generate_split(
-        operator=config.operator,
-        modulus=config.modulus,
-        frac_label_noise=config.frac_label_noise,
-        seed=config.data_seed,
-        shuffle=config.shuffle,
-        frac_train=config.frac_train,
-        apply_noise_to_test=config.apply_noise_to_test,
-    )
-
-    print(f"Train:{train_dataset}")
-    print(f"Val: {val_dataset}")
-
-    # Dataloaders
-    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size)
-    val_dataloader = DataLoader(val_dataset, batch_size=config.batch_size)
-
     # Model
-    learner = GrokkingLearner.create(config, train_dataloader, val_dataloader)
+    learner = GrokkingLearner.create(config)
     wandb.watch(learner.model)
 
     # Training

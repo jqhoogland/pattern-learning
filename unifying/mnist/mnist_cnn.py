@@ -21,8 +21,7 @@ from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 from tqdm.notebook import tqdm
 
 import wandb
-from patterns.dataset import ModularArithmetic, Operator
-from patterns.learner import BaseLearner, GrokkingConfig, GrokkingLearner, Reduction
+from patterns.learner import BaseLearner, Reduction
 from patterns.transformer import Transformer
 from patterns.utils import generate_run_name, wandb_run
 from patterns.vision import ExtModule, VisionConfig, VisionLearner
