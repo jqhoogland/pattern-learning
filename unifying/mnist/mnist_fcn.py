@@ -123,21 +123,23 @@ PROJECT = "mnist-grokking"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DEFAULT_MNIST_CONFIG = MNISTConfig(
     wandb_project=PROJECT,
-    frac_train=.0167,
+    frac_train=0.0167,
     frac_label_noise=0.1,
-    batch_size=200,  # 1000 / 200 = 5 steps per epoch
-    num_training_steps=50_000,  # = 10,000 epochs
+    batch_size=256,  # 1000 / 200 = 5 steps per epoch
+    num_training_steps=100_000,  # = 10,000 epochs
     # num_training_steps=int(1e6), #  = 200,000 epochs
     num_layers=5,
     width=200,
     init_mode="uniform",
     init_scale=4.0,
+    lr=0.0000025,
     max_lr=0.02,
-    lr_factor=6,
+    lr_factor=6.,
     weight_decay=1e-2,
-    seed=0,
     device=DEVICE,
-    use_sgd=False
+    use_sgd=False,
+    apply_noise_to_test=True,
+    seed=1,
     # criterion="mse"
 )
 

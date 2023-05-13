@@ -141,8 +141,8 @@ class BaseLearner:
         steps_per_epoch = len(self.trainloader)
         step = 0
 
-        prev_metrics = self.validate()
-        wandb.log(prev_metrics, step=step)
+        metrics = self.validate()
+        wandb.log(metrics, step=step)
 
         for epoch in tqdm(
             range(1, int(self.config.num_training_steps / steps_per_epoch) + 1)
@@ -152,21 +152,11 @@ class BaseLearner:
                     step < 100
                     or (step < 1000 and step % 5 == 0)
                     or (step < 10000 and step % 10 == 0)
-                    or (step % 100 == 0)
+                    or (step < 100000 and step % 100 == 0)
+                    or step % 1000 == 0
                 ) and step > 0:
                     metrics = self.validate()
                     wandb.log(metrics, step=step)
-
-                    if (
-                        abs(prev_metrics["test/loss"] - metrics["test/loss"]) < 1e-12
-                        and abs(prev_metrics["train/loss"] - metrics["train/loss"])
-                        < 1e-12
-                        and metrics["test/acc"] == 1.0
-                    ):
-                        print("Stopping early")
-                        return
-
-                    prev_metrics = metrics
 
                 self.model.train()
                 x, y = x.to(self.config.device), y.to(self.config.device)

@@ -9,6 +9,7 @@ from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 
 from patterns.learner import BaseLearner, Config, Reduction
+from patterns.dataset import LabelNoiseDataLoader
 
 
 class ExtModule(nn.Module):
@@ -48,3 +49,13 @@ class VisionLearner(BaseLearner):
     Config = VisionConfig
     Dataset = Union[VisionDataset, Subset[VisionDataset]]
 
+
+    @staticmethod
+    def get_loader(config: Config, dataset: Dataset, train=True) -> LabelNoiseDataLoader:
+        return LabelNoiseDataLoader(
+            dataset,
+            frac_label_noise=config.frac_label_noise * float(train or config.apply_noise_to_test),
+            batch_size=config.batch_size,
+            shuffle=train,
+            subsample=config.frac_train,  
+        )

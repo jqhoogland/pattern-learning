@@ -208,8 +208,6 @@ class ModularArithmetic(Dataset):
             shuffle=shuffle,
         )
 
-        print(dataset)
-
         return dataset.split(
             frac_train=frac_train,
         )
@@ -247,7 +245,7 @@ class LabelNoiseConfig(Protocol):
 
 class LabelNoiseDataLoader(DataLoader):
 
-    def __init__(self, original_dataset: Dataset, frac_label_noise: float,  **kwargs) -> None:
+    def __init__(self, original_dataset: Dataset, frac_label_noise: float, subsample=1., **kwargs) -> None:
         self.frac_label_noise = frac_label_noise
         self.original = DataLoader(original_dataset, **kwargs)
 
@@ -272,6 +270,13 @@ class LabelNoiseDataLoader(DataLoader):
             self.corrupted = []
         else:
             self.corrupted = DataLoader(corrupted_subset, **kwargs)
+        
+        if subsample < 1.0:  # Always applied
+            indices = torch.randperm(len(dataset))[
+                : int(len(dataset) * subsample)
+            ].tolist()
+            
+            dataset = Subset(dataset, indices)
 
         super().__init__(dataset, **kwargs)
     
