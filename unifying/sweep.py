@@ -2,6 +2,7 @@ from typing import Callable, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
+from scipy.ndimage import gaussian_filter
 
 import wandb
 
@@ -203,3 +204,21 @@ def extract_run(df: pd.DataFrame, **kwargs):
     steps = run.index.values
 
     return steps, run
+
+
+
+def extract_slice_from_pivot(pivot_table, step, metric, unique_col, smooth: Union[bool, float]=False):
+    _pivot_table = pivot_table.copy()
+
+    if smooth:
+        _pivot_table[metric] = gaussian_filter(pivot_table[metric].values, sigma=smooth)
+
+    slice_ = _pivot_table.loc[_pivot_table.index == step, :].T.reset_index()
+    slice_ = pd.melt(
+        slice_,
+        id_vars=[unique_col, "level_0"],
+        var_name="_step",
+        value_name=metric,
+    )
+
+    return slice_
