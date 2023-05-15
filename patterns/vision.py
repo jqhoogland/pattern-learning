@@ -75,15 +75,14 @@ class VisionLearner(BaseLearner):
             origin_indices = torch.randperm(num_samples)[:num_errors]
             target_indices = origin_indices.roll(1)
 
-            for origin, target in zip(origin_indices, target_indices):
-                dataset.targets[origin] = dataset.targets[
-                    target
-                ]  # TODO: Make this not in-place
-
-            return dataset
+            dataset.targets[origin_indices] = dataset.targets[target_indices]
+            
+            return dataset, origin_indices
 
         if config.frac_label_noise > 0.0 and (train or config.apply_noise_to_test):
-            dataset = add_label_noise(dataset, config.frac_label_noise)
+            dataset, wrong_indices = add_label_noise(dataset, config.frac_label_noise)
+        else:
+            wrong_indices = None
 
         if config.frac_train < 1.0:  # Always applied
             indices = torch.randperm(len(dataset))[

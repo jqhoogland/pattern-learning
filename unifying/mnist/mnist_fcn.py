@@ -72,7 +72,8 @@ class MLP(ExtModule):
         return self.layers(x)
 
     def parameter_groups(self):
-        return [l.parameters() for l in self.layers]
+        return [l.parameters() for l in self.layers if isinstance(l, nn.Linear)]
+
 
 @dataclass
 class MNISTConfig(VisionConfig):

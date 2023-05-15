@@ -37,18 +37,21 @@ def main():
     # Logging
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
+    config_dict = asdict(default_config)
+    del config_dict["d_vocab"]
+    del config_dict["d_mlp"]
+    del config_dict["d_head"]
+    del config_dict["batch_size"]
+
     wandb.init(
         project=PROJECT,
         id=run_id,
         settings=wandb.Settings(start_method="thread"),
-        config=asdict(default_config),  # Default config
+        config=config_dict,  # Default config
     )
 
     # GrokkingConfig
     config = EmbeddedGrokkingConfig(**wandb.config)
-
-    print("\nConfig:")
-    print(yaml.dump(asdict(config), default_flow_style=False))
 
     # Dataset
     train_dataset, val_dataset = ModularArithmetic.generate_split(
@@ -74,6 +77,7 @@ def main():
     embedding_model = GrokkingLearner.create(embedding_config, train_dataloader, val_dataloader).model
 
     learner = GrokkingLearner.create(config, train_dataloader, val_dataloader)
+    print(learner)
 
     # Embedding
     for p1, p2 in zip(embedding_model.parameters(), learner.model.parameters()):

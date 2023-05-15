@@ -39,11 +39,17 @@ def main():
     # Logging
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
+    config_dict = asdict(default_config)
+    del config_dict["d_vocab"]
+    del config_dict["d_mlp"]
+    del config_dict["d_head"]
+    del config_dict["batch_size"]
+
     wandb.init(
         project=PROJECT,
         id=run_id,
         settings=wandb.Settings(start_method="thread"),
-        config=asdict(default_config),  # Default config
+        config=config_dict,  # Default config
     )
 
     # GrokkingConfig

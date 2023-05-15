@@ -1,7 +1,8 @@
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
-from typing import Callable, Literal, Optional, Tuple, Union
+from typing import Callable, Literal, Optional, Tuple, Union, List, Dict
+import yaml 
 
 import torch
 import torch.nn.functional as F
@@ -13,6 +14,7 @@ import wandb
 from patterns.dataset import ModularArithmetic, Operator
 from patterns.transformer import Transformer
 from patterns.utils import generate_run_name
+
 
 DEFAULT_MODULUS = 113
 
@@ -92,7 +94,7 @@ class GrokkingConfig(Config):
         if self.d_mlp is None:
             self.d_mlp = 4 * self.d_model
         if self.d_head is None:
-            self.d_head = self.d_model // self.num_heads
+            self.d_head = max(self.d_model // self.num_heads, 1)
         if self.batch_size == -1:
             self.batch_size = int((self.modulus * self.modulus) * self.frac_train)
         if self.d_vocab is None:
@@ -168,8 +170,8 @@ class BaseLearner:
         steps_per_epoch = len(self.trainloader)
         step = 0
 
-        prev_metrics = self.validate()
-        wandb.log(prev_metrics, step=step)
+        metrics = self.validate()
+        wandb.log(metrics, step=step)
 
         for epoch in tqdm(
             range(1, int(self.config.num_training_steps / steps_per_epoch) + 1)
@@ -179,21 +181,11 @@ class BaseLearner:
                     step < 100
                     or (step < 1000 and step % 5 == 0)
                     or (step < 10000 and step % 10 == 0)
-                    or (step % 100 == 0)
+                    or (step % 100 == 0 and step < 100000)
+                    or (step % 1000 == 0)
                 ) and step > 0:
                     metrics = self.validate()
                     wandb.log(metrics, step=step)
-
-                    if (
-                        abs(prev_metrics["test/loss"] - metrics["test/loss"]) < 1e-12
-                        and abs(prev_metrics["train/loss"] - metrics["train/loss"])
-                        < 1e-12
-                        and metrics["test/acc"] == 1.0
-                    ):
-                        print("Stopping early")
-                        return
-
-                    prev_metrics = metrics
 
                 self.model.train()
                 x, y = x.to(self.config.device), y.to(self.config.device)
@@ -230,7 +222,7 @@ class BaseLearner:
 
         return acc
 
-    def validate(self):
+    def validate(self, callbacks: Optional[List[Callable]] = None) -> Dict[str, float]:
         """
         Calculate the train and test loss and accuracy of a model,
         as well as the norm of the weights and the "efficiency".
@@ -267,44 +259,52 @@ class BaseLearner:
 
             return norm_squared.sqrt()
 
-        def _dist_from_init(model):
-            distance = torch.zeros(1, dtype=torch.float64, device=self.config.device)
-            for p, p0 in zip(model.parameters(), self.initial_weights):
-                distance += (p - p0).norm().pow(2)
+        # def _dist_from_init(model):
+        #     distance = torch.zeros(1, dtype=torch.float64, device=self.config.device)
+        #     for p, p0 in zip(model.parameters(), self.initial_weights):
+        #         distance += (p - p0).norm().pow(2)
 
-            return distance.sqrt()
+        #     return distance.sqrt()
 
-        def _cos_sim_with_init(model):
-            cos_sim = torch.zeros(1, dtype=torch.float64, device=self.config.device)
-            norm1, norm2 = torch.zeros(
-                1, dtype=torch.float64, device=self.config.device
-            ), torch.zeros(1, dtype=torch.float64, device=self.config.device)
+        # def _cos_sim_with_init(model):
+        #     cos_sim = torch.zeros(1, dtype=torch.float64, device=self.config.device)
+        #     norm1, norm2 = torch.zeros(
+        #         1, dtype=torch.float64, device=self.config.device
+        #     ), torch.zeros(1, dtype=torch.float64, device=self.config.device)
 
-            for p, p0 in zip(model.parameters(), self.initial_weights):
-                cos_sim += (p * p0).sum()
-                norm1 += p.norm().pow(2)
-                norm2 += p0.norm().pow(2)
+        #     for p, p0 in zip(model.parameters(), self.initial_weights):
+        #         cos_sim += (p * p0).sum()
+        #         norm1 += p.norm().pow(2)
+        #         norm2 += p0.norm().pow(2)
 
-            return cos_sim / (norm1 * norm2).sqrt()
+        #     return cos_sim / (norm1 * norm2).sqrt()
 
         train_loss, train_acc = _validate(self.trainloader)
         test_loss, test_acc = _validate(self.testloader)
         weight_norm = _weight_norm(self.model)
-        dist_from_init = _dist_from_init(self.model)
-        cos_sim_with_init = _cos_sim_with_init(self.model)
+        # dist_from_init = _dist_from_init(self.model)
+        # cos_sim_with_init = _cos_sim_with_init(self.model)
 
         # Efficiency is logprob of the correct label divided by the norm of the weights
+
+        extras = {}
+
+        if callbacks is not None:
+            for callback in callbacks:
+                extras.update(callback(self.model))
 
         return {
             "train/loss": train_loss.item(),
             "train/acc": train_acc.item(),
-            "train/efficiency": (train_loss / weight_norm).item(),
+            # "train/efficiency": (train_loss / weight_norm).item(),
             "test/loss": test_loss.item(),
             "test/acc": test_acc.item(),
-            "test/efficiency": (test_loss / weight_norm).item(),
+            # "test/efficiency": (test_loss / weight_norm).item(),
             "weight/norm": weight_norm.item(),
-            "weight/dist_from_init": dist_from_init.item(),
-            "weight/cos_sim_with_init": cos_sim_with_init.item(),
+            # "weight/dist_from_init": dist_from_init.item(),
+            # "weight/cos_sim_with_init": cos_sim_with_init.item(),
+
+            **extras,
         }
 
     @classmethod
@@ -355,6 +355,11 @@ class BaseLearner:
 
         return optimizer
 
+
+    def __repr__(self):
+        config_yaml = yaml.dump(asdict(self.config))
+        config_yaml = "\n".join(["    " + line for line in config_yaml.split("\n")])
+        return f"{self.__class__.__name__}(\n{config_yaml}\n)"
 
 class GrokkingLearner(BaseLearner):
     Config = GrokkingConfig

@@ -18,17 +18,15 @@ parameters:
     num_layers: 
         value: 5
     init_scale:
-        # values: [6., 1.]
         value: 4.
     lr_factor:
-        values: [2.5, 1.5, 2]
-        # value: 2.5
-    # max_lr:
-    #    value: 0.00004
+        values: [6., 1.5, 2]
+    max_lr:
+        value: 0.02
     lr:
-        value: 0.000001
+        value: 0.0000025
     apply_noise_to_test:
         value: True
     seed:
         # values: [1, 2, 3, 4, 5]
-        value: 1
+        value: 0

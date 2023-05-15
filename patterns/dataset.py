@@ -158,8 +158,6 @@ class ModularArithmetic(Dataset):
 
         data, labels = cls.apply_noise(data, labels, frac_label_noise)
 
-        # draw_arithmetic_table(data, labels)
-
         return cls(data=data, labels=labels, metadata=metadata)
 
     def split(

@@ -1,5 +1,5 @@
 method: grid
-name: fcn-interpolation
+name: fcn-interpolation-2
 program: unifying/mnist/mnist_fcn.py
 project: mnist-grokking
 parameters:
@@ -8,23 +8,19 @@ parameters:
     width: 
         value: 200
     frac_label_noise:
-        # values: [0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.05, 0.15, 0.25, 0.35, 0.45, 0.025, 0.075, 0.125, 0.175, 0.225, 0.275, 0.325, 0.375, 0.425, 0.475]
         value: 0.1  # Seems to not even be necessary
     weight_decay:
         value: 0.01
     frac_train:
-        # values: [0.0167, 0.1, 1.]
         value: 0.0167
     num_layers: 
         value: 5
     init_scale:
-        # values: [6., 1.]
         value: 4.
     lr_factor:
-        values: [2.5, 1., 0.4]
-        # value: 2.5
-    max_lr:
-        value: 0.0001
+        values: [4.25, 4.75, 5.25, 6.75, 4.625, 4.875, 5.125, 5.375, 5.625, 5.875, 6.125, 6.25, 6.375, 6.5, 6.625, 6.75, 6.875, 7.]
+    lr:
+        value: 0.0000025
     apply_noise_to_test:
         value: True
     seed:
