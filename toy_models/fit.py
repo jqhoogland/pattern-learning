@@ -33,7 +33,14 @@ def rescale_run(run, new_max=1.0, log=True):
 
 
 class Pattern(nn.Module):
-    def __init__(self, max_time: float = 1.0, onset: Optional[float] = None, generalization: Optional[float] = None, strength: Optional[float] = None, speed: Optional[float] = None):
+    def __init__(
+        self,
+        max_time: float = 1.0,
+        onset: Optional[float] = None,
+        generalization: Optional[float] = None,
+        strength: Optional[float] = None,
+        speed: Optional[float] = None,
+    ):
         # 4 scalar parameters: strength, speed, onset, generalization
         super().__init__()
 
@@ -46,15 +53,16 @@ class Pattern(nn.Module):
         self.speed = nn.Parameter(torch.tensor(speed))
         self.onset = nn.Parameter(torch.tensor(onset))
         self._generalization = nn.Parameter(torch.log(torch.tensor(generalization)))
+        self.exponent = nn.Parameter(torch.tensor(1.0))
 
     @staticmethod
     def _inv_sigmoid(x):
         return torch.log(x / (1 - x))
-    
+
     @property
     def strength(self):
         return F.sigmoid(self._strength)
-    
+
     @strength.setter
     def strength(self, value):
         self._strength = self._inv_sigmoid(value)
@@ -62,13 +70,13 @@ class Pattern(nn.Module):
     @property
     def generalization(self):
         return torch.exp(self._generalization)
-    
+
     @generalization.setter
     def generalization(self, value):
         self._generalization = torch.log(value)
 
     def forward(self, t):
-        return self.strength * F.sigmoid(self.speed * (t - self.onset))
+        return self.strength * F.sigmoid(self.speed * (t**self.exponent - self.onset))
 
     def __repr__(self):
         return f"Pattern(strength={self.strength.data.float()}, speed={self.speed.data.float()}, onset={self.onset.data.float()}, generalization={self.generalization.data.float()})"
@@ -78,16 +86,18 @@ class PatternLearningModel(nn.Module):
     def __init__(self, num_patterns: int = 3, max_time=1.0):
         super().__init__()
         self.num_patterns = num_patterns
-        self.patterns = nn.ModuleList([
-            Pattern(
-                max_time, 
-                onset=max_time * (i + 1) / (num_patterns + 1),
-                speed=10./max_time,
-                generalization=0.5,
-                strength=0.5
-            ) 
-            for i in range(num_patterns)
-        ])
+        self.patterns = nn.ModuleList(
+            [
+                Pattern(
+                    max_time,
+                    onset=max_time * (i + 1) / (num_patterns + 1),
+                    speed=10.0 / max_time,
+                    generalization=0.5,
+                    strength=0.5,
+                )
+                for i in range(num_patterns)
+            ]
+        )
         self.max_time = max_time
 
         self.binary_mask = torch.tensor(
@@ -141,7 +151,7 @@ class PatternLearningModel(nn.Module):
                 if i & (1 << j):
                     # print(i, j, self.patterns[j].generalization, generalizations[i])
                     generalizations[i] += self.patterns[j].generalization
-                
+
             if total > 0:
                 generalizations[i] /= total
 
@@ -150,11 +160,19 @@ class PatternLearningModel(nn.Module):
     def test(self, t):
         ps = self.predictivenesses(t)
         # Fraction not explained by patterns vs fraction explained by patterns
-        norm_term = (1 - torch.prod(1 - ps, dim=0)) / torch.sum(ps)  
+        norm_term = (1 - torch.prod(1 - ps, dim=0)) / torch.sum(ps)
         us = ps * norm_term
         return us @ self.gs()
 
-    def fit(self, run, lr: Union[callable, float]=0.1, num_epochs=1000, callback=None, callback_ivl=100, gamma=None):
+    def fit(
+        self,
+        run,
+        lr: Union[callable, float] = 0.1,
+        num_epochs=1000,
+        callback=None,
+        callback_ivl=100,
+        gamma=None,
+    ):
         ts = torch.tensor(run._step.values).float()
 
         train_ys = torch.tensor(run["train/acc"].values).float()
@@ -168,7 +186,7 @@ class PatternLearningModel(nn.Module):
 
         # Cross-entropy
         # criterion = lambda preds, ys: -torch.sum(ys * torch.log(preds + eps) + (1 - ys) * torch.log(1 - preds + eps))
-        
+
         if callback is not None:
             callback(self)
 
@@ -187,7 +205,7 @@ class PatternLearningModel(nn.Module):
             optimizer.step()
 
             print(f"Epoch {epoch} - loss: {loss.item()}")
-            
+
             if callback is not None and epoch % callback_ivl == 0:
                 callback(self)
 
@@ -208,7 +226,7 @@ class PatternLearningModel(nn.Module):
             d[f"pattern_{i}/generalization"] = p.generalization.data
 
         return d
-    
+
     def rescale(self, max_time):
         """Rescale the model to a new max time"""
         scaling_factor = max_time / self.max_time

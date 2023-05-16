@@ -7,6 +7,7 @@ from scipy.ndimage import gaussian_filter
 import wandb
 
 OutlierStrategy = Literal["remove", "replace", "keep"]
+METRICS= ["train/acc", "test/acc", "train/loss", "test/loss", "corrupted/acc", "uncorrupted/acc"]
 
 
 def generate_coarse_to_fine_grid_sweep(
@@ -45,6 +46,7 @@ def rearrange_coarse_to_fine(grid: List, step_sizes=[10, 5, 3, 1]):
     return rearranged_grid
 
 
+
 def get_history(
     *sweep_ids,
     unique_cols: Union[List[str], str] = "weight_decay",
@@ -52,6 +54,7 @@ def get_history(
     project: str = "grokking",
     allow_duplicates=False,
     combine_seeds=False,
+    metrics=METRICS
 ):
     """
     Gathers all the runs from a series of sweeps and combines them into a single dataframe.
@@ -95,13 +98,6 @@ def get_history(
     # Sort
     histories = histories.sort_values(by=[*unique_cols, "_step"])
 
-    # Remove any runs that didn't have any steps after 1000
-    for unique_col in unique_cols:
-        valid_runs = histories.groupby(unique_col).apply(
-            lambda x: x["_step"].max() > 1000
-        )
-        histories = histories[histories[unique_col].isin(valid_runs[valid_runs].index)]
-
     if combine_seeds:
         assert (
             len(unique_cols) == 1
@@ -116,13 +112,12 @@ def get_history(
 
             if len(seeds) > 1:
                 # Define the metrics that need to be averaged
-                metrics = METRICS
                 for metric in metrics:
                     # Calculate the mean value for each metric and _step
                     means_groups = runs.groupby("_step")[metric]
 
                     means = means_groups.apply(
-                        lambda x: x.ffill().bfill().mean() if x.isna().any() else x
+                        lambda x: x.ffill().bfill().mean() if x.isna().any() else x.mean()
                     )
 
                     # Update the histories dataframe
@@ -267,8 +262,6 @@ def exp_filter(z, sigma):
     
     return z
 
-
-METRICS= ["train/acc", "test/acc", "train/loss", "test/loss", "corrupted/acc", "uncorrupted/acc"]
 
 def extract_run_from_pivot(pivot_table, run_val, smooth: Union[bool, float]=False, metrics=METRICS):
     _pivot_table = pivot_table.copy()
