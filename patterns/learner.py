@@ -222,7 +222,7 @@ class BaseLearner:
 
         return acc
 
-    def validate(self, callbacks: Optional[List[Callable]] = None) -> Dict[str, float]:
+    def validate(self) -> Dict[str, float]:
         """
         Calculate the train and test loss and accuracy of a model,
         as well as the norm of the weights and the "efficiency".
@@ -287,11 +287,35 @@ class BaseLearner:
 
         # Efficiency is logprob of the correct label divided by the norm of the weights
 
-        extras = {}
+        def corrupted_score():
+            """Accuracy on the corrupted samples in the training set."""
 
-        if callbacks is not None:
-            for callback in callbacks:
-                extras.update(callback(self.model))
+            if hasattr(self.trainloader, "wrong_loader"):
+                loss, acc = _validate(self.trainloader.wrong_loader)
+                return loss.item(), acc.item()
+            else:
+                warnings.warn(
+                    "No `wrong_indices` attribute found on the dataset. "
+                    "Returning `0.`."
+                )
+                return 0., 0.
+            
+        corrupted_loss, corrupted_acc = corrupted_score()
+
+        def uncorrupted_score():
+            """Accuracy on the uncorrupted samples in the training set."""
+
+            if hasattr(self.trainloader, "right_loader"):
+                loss, acc = _validate(self.trainloader.right_loader)
+                return loss.item(), acc.item()
+            else:
+                warnings.warn(
+                    "No `right_indices` attribute found on the dataset. "
+                    "Returning `0.`."
+                )
+                return 0., 0.
+            
+        uncorrupted_loss, uncorrupted_acc = uncorrupted_score()
 
         return {
             "train/loss": train_loss.item(),
@@ -303,8 +327,10 @@ class BaseLearner:
             "weight/norm": weight_norm.item(),
             # "weight/dist_from_init": dist_from_init.item(),
             # "weight/cos_sim_with_init": cos_sim_with_init.item(),
-
-            **extras,
+            "corrupted/loss": corrupted_loss,
+            "corrupted/acc": corrupted_acc,
+            "uncorrupted/loss": uncorrupted_loss,
+            "uncorrupted/acc": uncorrupted_acc,
         }
 
     @classmethod

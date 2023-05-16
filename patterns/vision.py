@@ -1,10 +1,10 @@
 # import cifar10
 from dataclasses import dataclass
-from typing import List, Literal, Union
+from typing import List, Literal, Union, Tuple
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader, Dataset, Subset, SubsetRandomSampler
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 
@@ -68,30 +68,57 @@ class VisionLearner(BaseLearner):
     def get_loader(config: Config, dataset: Dataset, train=True) -> DataLoader[Dataset]:
         def add_label_noise(
             dataset: VisionLearner.Dataset, frac_label_noise: float
-        ) -> VisionLearner.Dataset:
+        ) -> Tuple[VisionLearner.Dataset, torch.Tensor]:
             num_samples = len(dataset)
             num_errors = int(num_samples * frac_label_noise)
 
             origin_indices = torch.randperm(num_samples)[:num_errors]
             target_indices = origin_indices.roll(1)
 
-            dataset.targets[origin_indices] = dataset.targets[target_indices]
+            targets_copy = dataset.targets.clone()
+
+            for origin, target in zip(origin_indices, target_indices):
+                dataset.targets[origin] = targets_copy[target]
             
             return dataset, origin_indices
 
         if config.frac_label_noise > 0.0 and (train or config.apply_noise_to_test):
             dataset, wrong_indices = add_label_noise(dataset, config.frac_label_noise)
         else:
-            wrong_indices = None
+            wrong_indices = []
+
+        right_indices = torch.tensor([i for i in range(len(dataset)) if i not in wrong_indices])
 
         if config.frac_train < 1.0:  # Always applied
             indices = torch.randperm(len(dataset))[
                 : int(len(dataset) * config.frac_train)
             ].tolist()
+
+            wrong_indices = torch.tensor([indices.index(i) for i in wrong_indices if i in indices])
+            right_indices = torch.tensor([indices.index(i) for i in right_indices if i in indices])
             dataset = Subset(dataset, indices)
 
-        return DataLoader(
+        dataset.wrong_indices = [i.detach().int() for i in wrong_indices] # type: ignore
+        dataset.right_indices = [i.detach().int() for i in right_indices] # type: ignore
+
+        dl = DataLoader(
             dataset,
             batch_size=config.batch_size,
             shuffle=train,
         )
+
+        dl.wrong_loader = DataLoader(
+            dataset,
+            batch_size=len(wrong_indices),
+            sampler=SubsetRandomSampler(wrong_indices),
+        )
+
+        dl.right_loader = DataLoader(
+            dataset,
+            batch_size=len(right_indices),
+            sampler=SubsetRandomSampler(right_indices),
+        )
+
+        print("Right:", len(right_indices), "Wrong:", len(wrong_indices))
+
+        return dl
