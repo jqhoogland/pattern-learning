@@ -8,12 +8,58 @@ from matplotlib import cm, colors, gridspec
 from matplotlib.colors import LogNorm
 from scipy.ndimage import gaussian_filter
 
-from .sweep import extract_run, extract_slice, get_pivot
+from .sweep import extract_run, extract_slice, get_pivot, exp_filter
 
 BLUE, RED = sns.color_palette()[0], sns.color_palette()[3]
 BLUES = sns.dark_palette("#79C", as_cmap=True)
 REDS = sns.dark_palette((20, 60, 50), input="husl", as_cmap=True)
 
+
+
+# Heatmap
+def create_heatmap(
+    x,
+    y,
+    z,
+    ax,
+    smooth: Union[bool, float] = False,
+    cmap="inferno",
+    log_x: bool = True,
+    log_y: bool = True,
+    log_z: bool = True,
+    metric_label: str = "",
+    title: str = "",
+):
+    X, Y = np.meshgrid(x, y)
+
+    if smooth:
+        z = exp_filter(z, sigma=smooth)
+
+    if log_z:
+        mesh = ax.pcolormesh(X, Y, z, cmap=cmap, norm=LogNorm())
+    else:
+        mesh = ax.pcolormesh(X, Y, z, cmap=cmap)
+
+    if log_y:
+        ax.set_yscale("log")
+
+    if log_x:
+        ax.set_xscale("log")
+
+    ax.set_title(metric_label)
+    ax.set_xlabel(title)
+    ax.set_ylabel("Steps")
+    ax.set_ylim(y.max(), y.min())
+    yticks = [10**i for i in range(0, int(np.floor(np.log10(y.max()))))]
+
+    if y.max() not in yticks:
+        yticks.append(y.max())
+
+    ax.set_yticks(yticks)
+    ax.set_xlim(x[0], x[-1])
+    ax.invert_yaxis()
+
+    return mesh
 
 def plot(
     df: pd.DataFrame,
@@ -184,46 +230,6 @@ def plot_curves_2x2(
     fig.tight_layout()
 
 
-# Heatmap
-def create_heatmap(
-    x,
-    y,
-    z,
-    ax,
-    smooth: Union[bool, float] = False,
-    cmap="inferno",
-    log_x: bool = True,
-    log_y: bool = True,
-    log_z: bool = True,
-    metric_label: str = "",
-    title: str = "",
-):
-    X, Y = np.meshgrid(x, y)
-
-    if smooth:
-        z = gaussian_filter(z, sigma=float(smooth))
-
-    if log_z:
-        mesh = ax.pcolormesh(X, Y, z, cmap=cmap, norm=LogNorm())
-    else:
-        mesh = ax.pcolormesh(X, Y, z, cmap=cmap)
-
-    if log_y:
-        ax.set_yscale("log")
-
-    if log_x:
-        ax.set_xscale("log")
-
-    ax.set_title(metric_label)
-    ax.set_xlabel(title)
-    ax.set_ylabel("Steps")
-    ax.set_ylim(y.max(), y.min())
-    ax.set_yticks([1, 10, 100, 1000, 10000, y.max()])
-    ax.set_xlim(x[0], x[-1])
-    ax.invert_yaxis()
-
-    return mesh
-
 
 def plot_details(
     df: pd.DataFrame,
@@ -390,123 +396,3 @@ def plot_all_details(
         fig.savefig(f"../figures/{unique_col}_{slug}.{format}", dpi=300)
         plt.show()
 
-
-def plot_interpolation_overview(
-    df: pd.DataFrame,
-    unique_col: str = "weight_decay",
-    smooth: Union[bool, float] = False,
-    cmap="inferno",
-    log_loss=True,
-    log_x: bool = True,
-    log_y: bool = True,
-    title: str = "",
-    metric: str = "test/acc",
-    metric_label: str = "Accuracy",
-    run_vals: List[float] = [0.0],
-    plot_extra: bool = False,
-    latex: str = "",
-    suptitle: str = "",
-):
-    metric_label_short = (
-        metric_label.split(" ")[1] if " " in metric_label else metric_label
-    )
-
-    num_snapshots = len(run_vals)
-
-    # create a figure with a 2x2 grid of subplots
-    fig = plt.figure(figsize=(10, 6))
-    gs = gridspec.GridSpec(num_snapshots, 2, width_ratios=[3, 2], hspace=0.25)
-
-    pivot_table = get_pivot(
-        df, unique_col, reindex=True, interpolate=True, columns=[metric]
-    )
-    unique_vals = sorted(df[unique_col].unique())
-
-    ax1 = plt.subplot(gs[:, 0])
-    y = pivot_table[metric].index
-    mesh = create_heatmap(
-        x=unique_vals,
-        y=y,
-        z=pivot_table[metric].values,
-        ax=ax1,
-        smooth=smooth,
-        cmap=cmap,
-        log_x=log_x,
-        log_y=log_y,
-        log_z=log_loss and "loss" in metric,
-        title=title,
-    )
-
-    fig.colorbar(mesh, ax=ax1)
-
-    # Plot horizontal lines at the run_vals entries
-    run_vals_lines = [(v + 0.0125 if v == 0 else v) for v in run_vals]
-    ax1.vlines(run_vals_lines, y.min(), y.max(), color=RED)
-
-    # Find the _step for each run where the train/acc first reaches 1.0
-    interpolation = []
-    convergence = []
-
-    for i, val in enumerate(unique_vals):
-        run = df.loc[(df[unique_col] == val), :]
-
-        interp_max = run["train/acc"].max()
-        interp_threshold = interp_max * 0.95
-        interp_step = run.loc[run["train/acc"] > interp_threshold, "_step"].min()  # type: ignore
-        interp_val = run.loc[run._step == interp_step, "train/acc"].values[0]  # type: ignore
-        interpolation.append((interp_step, interp_val))
-
-        conv_max = run[metric].max()
-        conv_threshold = conv_max * 0.95
-        conv_step = run.loc[run[metric] > conv_threshold, "_step"].min()  # type: ignore
-        conv_val = run.loc[run._step == conv_step, metric].values[0]  # type: ignore
-        convergence.append((conv_step, conv_val))
-
-    print(interpolation, convergence)
-
-    ax1.plot(
-        unique_vals,
-        [v for (v, _) in interpolation],
-        color="grey",
-        linestyle="--",
-        label="Interpolation",
-    )
-    ax1.plot(
-        unique_vals,
-        [v for (v, _) in convergence],
-        color="grey",
-        linestyle="--",
-        label="Convergence",
-    )
-
-    for i, val in enumerate(run_vals):
-        run = df.loc[(df[unique_col] == val), :]
-        ax = plt.subplot(gs[i, 1])
-
-        # Interpolation threshold
-        unique_val_idx = unique_vals.index(val)
-
-        interp_step, interp_val = interpolation[unique_val_idx]
-        ax.vlines(interp_step, 0, interp_val, color="grey", linestyle="--", label=None)
-
-        # Test convergence threshold
-        conv_step, conv_val = convergence[unique_val_idx]
-        ax.vlines(conv_step, 0, conv_val, color="grey", linestyle="--", label=None)
-
-        ax.plot(run._step, run["train/acc"], color=BLUE, label="Train")
-        ax.plot(run._step, run[metric], color=RED, label="Test")
-
-        val_rounded = round(val, 2)
-        ax.set_title(f"{metric_label_short} for ${latex}={val_rounded}$")
-
-        ax.set_ylim([0.0, 1.05])
-        ax.set_xscale("log")
-        ax.set_xlim([1e0, df._step.max()])
-
-        if i < len(run_vals) - 1:
-            ax.set_xticklabels([])
-
-        if i == 0:
-            ax.legend(loc="lower right")
-
-    plt.suptitle(suptitle)

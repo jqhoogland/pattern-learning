@@ -42,10 +42,30 @@ class Pattern(nn.Module):
         onset = onset or torch.rand(1)[0] * max_time
         generalization = generalization or torch.rand(1)[0]
 
-        self.strength = nn.Parameter(torch.tensor(strength))
+        self._strength = nn.Parameter(self._inv_sigmoid(torch.tensor(strength)))
         self.speed = nn.Parameter(torch.tensor(speed))
         self.onset = nn.Parameter(torch.tensor(onset))
-        self.generalization = nn.Parameter(torch.tensor(generalization))
+        self._generalization = nn.Parameter(torch.log(torch.tensor(generalization)))
+
+    @staticmethod
+    def _inv_sigmoid(x):
+        return torch.log(x / (1 - x))
+    
+    @property
+    def strength(self):
+        return F.sigmoid(self._strength)
+    
+    @strength.setter
+    def strength(self, value):
+        self._strength = self._inv_sigmoid(value)
+
+    @property
+    def generalization(self):
+        return torch.exp(self._generalization)
+    
+    @generalization.setter
+    def generalization(self, value):
+        self._generalization = torch.log(value)
 
     def forward(self, t):
         return self.strength * F.sigmoid(self.speed * (t - self.onset))
@@ -62,7 +82,7 @@ class PatternLearningModel(nn.Module):
             Pattern(
                 max_time, 
                 onset=max_time * (i + 1) / (num_patterns + 1),
-                speed=1.,
+                speed=10./max_time,
                 generalization=0.5,
                 strength=0.5
             ) 
@@ -79,21 +99,8 @@ class PatternLearningModel(nn.Module):
 
         self.counts = self.binary_mask.sum(dim=1)
 
-    def forward(self, t):
-        return 1 - torch.prod(1 - self.predictivenesses(t), dim=0)
-
-    # def usages(self, t):
-    #     preds = self.predictivenesses(t)
-    #     usages = torch.prod(preds.T * self.binary_mask + (1 - preds.T) * (1 - self.binary_mask), dim=1)
-    #     return usages
-
     def gs(self):
         return torch.stack([p.generalization for p in self.patterns])
-
-    # def generalizations(self):
-    #     generalizations = torch.sum(self.gs().T * self.binary_mask, dim=1) / self.counts
-    #     generalizations[0] = 0
-    #     return generalizations
 
     def predictivenesses(self, t):
         return torch.stack([p(t) for p in self.patterns])
@@ -122,24 +129,32 @@ class PatternLearningModel(nn.Module):
     def generalizations(self):
         generalizations = torch.zeros(2**self.num_patterns)
 
+        total = 0
+
+        for i in range(self.num_patterns):
+            total += self.patterns[i].generalization
+
         for i in range(2**self.num_patterns):
-            count = 0
+            total = 0
 
             for j in range(self.num_patterns):
                 if i & (1 << j):
                     # print(i, j, self.patterns[j].generalization, generalizations[i])
                     generalizations[i] += self.patterns[j].generalization
-                    count += 1
-
-            if count > 0:
-                generalizations[i] /= count
+                
+            if total > 0:
+                generalizations[i] /= total
 
         return generalizations
 
     def test(self, t):
-        return torch.sum(self.generalizations() * self.usages(t), dim=0)
+        ps = self.predictivenesses(t)
+        # Fraction not explained by patterns vs fraction explained by patterns
+        norm_term = (1 - torch.prod(1 - ps, dim=0)) / torch.sum(ps)  
+        us = ps * norm_term
+        return us @ self.gs()
 
-    def fit(self, run, lr=0.1, num_epochs=1000, callback=None, callback_ivl=100):
+    def fit(self, run, lr: Union[callable, float]=0.1, num_epochs=1000, callback=None, callback_ivl=100, gamma=None):
         ts = torch.tensor(run._step.values).float()
 
         train_ys = torch.tensor(run["train/acc"].values).float()
@@ -147,9 +162,15 @@ class PatternLearningModel(nn.Module):
 
         optimizer = optim.Adam(self.parameters(), lr=lr)
         criterion = nn.MSELoss()
+
+        if gamma:
+            scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=None)
+
         # Cross-entropy
-        eps = 1e-6
         # criterion = lambda preds, ys: -torch.sum(ys * torch.log(preds + eps) + (1 - ys) * torch.log(1 - preds + eps))
+        
+        if callback is not None:
+            callback(self)
 
         for epoch in tqdm(range(num_epochs)):
             train_preds = torch.zeros_like(train_ys)
@@ -165,11 +186,13 @@ class PatternLearningModel(nn.Module):
             loss.backward()
             optimizer.step()
 
-            if epoch < 10 or epoch % 10 == 0:
-                print(f"Epoch {epoch} - loss: {loss.item()}")
+            print(f"Epoch {epoch} - loss: {loss.item()}")
             
             if callback is not None and epoch % callback_ivl == 0:
                 callback(self)
+
+            if gamma:
+                scheduler.step()
 
         return self
 

@@ -116,7 +116,7 @@ def get_history(
 
             if len(seeds) > 1:
                 # Define the metrics that need to be averaged
-                metrics = ["train/acc", "test/acc", "train/loss", "test/loss"]
+                metrics = METRICS
                 for metric in metrics:
                     # Calculate the mean value for each metric and _step
                     means_groups = runs.groupby("_step")[metric]
@@ -260,3 +260,24 @@ def extract_slice_from_pivot(
     )
 
     return slice_
+
+
+def exp_filter(z, sigma):
+    z = gaussian_filter(z, sigma=sigma, mode="nearest")
+    
+    return z
+
+
+METRICS= ["train/acc", "test/acc", "train/loss", "test/loss", "corrupted/acc", "uncorrupted/acc"]
+
+def extract_run_from_pivot(pivot_table, run_val, smooth: Union[bool, float]=False, metrics=METRICS):
+    _pivot_table = pivot_table.copy()
+
+    if smooth:
+        for metric in metrics:
+            _pivot_table[metric] = exp_filter(pivot_table[metric].values, sigma=(smooth))
+
+    run = _pivot_table[[(m, run_val) for m in metrics]]
+    run = run.reset_index()
+
+    return run
