@@ -15,7 +15,7 @@ parameters:
         value: 0.0167
     num_layers: 
         value: 5
-    init_scale:
+    init_scale:w
         value: 4.
     lr:
         value: 0.0000025
