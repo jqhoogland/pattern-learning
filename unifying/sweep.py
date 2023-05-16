@@ -9,7 +9,9 @@ import wandb
 OutlierStrategy = Literal["remove", "replace", "keep"]
 
 
-def generate_coarse_to_fine_grid_sweep(min_, max_, total_steps, step_sizes=[10, 5, 3, 1], type_="log"):
+def generate_coarse_to_fine_grid_sweep(
+    min_, max_, total_steps, step_sizes=[10, 5, 3, 1], type_="log"
+):
     if type_ == "log":
         # Generate the logscale range
         grid = np.logspace(np.log10(min_), np.log10(max_), total_steps)
@@ -49,6 +51,7 @@ def get_history(
     entity: str = "jqhoogland",
     project: str = "grokking",
     allow_duplicates=False,
+    combine_seeds=False,
 ):
     """
     Gathers all the runs from a series of sweeps and combines them into a single dataframe.
@@ -98,6 +101,39 @@ def get_history(
             lambda x: x["_step"].max() > 1000
         )
         histories = histories[histories[unique_col].isin(valid_runs[valid_runs].index)]
+
+    if combine_seeds:
+        assert (
+            len(unique_cols) == 1
+        ), "Can only combine seeds if there is a single unique column"
+
+        unique_col = unique_cols[0]
+        unique_vals = histories[unique_col].unique()
+
+        for val in unique_vals:
+            runs = histories[histories[unique_col] == val]
+            seeds = runs.seed.unique()
+
+            if len(seeds) > 1:
+                # Define the metrics that need to be averaged
+                metrics = ["train/acc", "test/acc", "train/loss", "test/loss"]
+                for metric in metrics:
+                    # Calculate the mean value for each metric and _step
+                    means_groups = runs.groupby("_step")[metric]
+
+                    means = means_groups.apply(
+                        lambda x: x.ffill().bfill().mean() if x.isna().any() else x
+                    )
+
+                    # Update the histories dataframe
+                    for _step, mean_value in means.items():
+                        mask = (histories[unique_col] == val) & (
+                            histories._step == _step
+                        )
+                        histories.loc[mask, metric] = mean_value
+
+        # Remove duplicate rows
+        histories = histories.drop_duplicates(subset=[*unique_cols, "_step"])
 
     return histories
 
@@ -192,6 +228,7 @@ def extract_slice(df: pd.DataFrame, step: int, unique_col: str):
 
     return unique_vals, slice_
 
+
 def extract_run(df: pd.DataFrame, **kwargs):
     # Generate the 1x4 grid of Epoch-wise, Model-wise, Sample-wise, and Regularization-wise plots
     # Epoch-wise
@@ -206,8 +243,9 @@ def extract_run(df: pd.DataFrame, **kwargs):
     return steps, run
 
 
-
-def extract_slice_from_pivot(pivot_table, step, metric, unique_col, smooth: Union[bool, float]=False):
+def extract_slice_from_pivot(
+    pivot_table, step, metric, unique_col, smooth: Union[bool, float] = False
+):
     _pivot_table = pivot_table.copy()
 
     if smooth:
