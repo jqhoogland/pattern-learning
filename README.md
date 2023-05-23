@@ -1,10 +1,6 @@
-# Unifying Grokking and Double Descent
-Xander Davies, Lauro Langosco, and David Krueger
+# Delayed Generalization: Unifying Grokking and Double Descent
 
-This is the repository for "Unifying Grokking and Double Descent," appearing at the [2022 NeurIPS ML Safety Workshop](https://neurips2022.mlsafety.org/).
-
-See `toy_grok_dd.ipynb` for the toy model results, and `grok-replication/` for code replicating grokking (which can be used to replicate model-wise grokking).
-
+## Interpolating between grokking and double descent
 
 ## Running the sweeps
 
@@ -33,3 +29,8 @@ CUDA_VISIBLE_DEVICES=0 wandb agent <sweep_id> &
 CUDA_VISIBLE_DEVICES=1 wandb agent <sweep_id> &
 ...
 ```
+
+## Toy Model
+
+### Fitting the toy model
+
