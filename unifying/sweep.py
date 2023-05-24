@@ -8,7 +8,7 @@ import wandb
 
 OutlierStrategy = Literal["remove", "replace", "keep"]
 METRICS= ["train/acc", "test/acc", "train/loss", "test/loss", "corrupted/acc", "uncorrupted/acc"]
-
+ENTITY = "<Insert entity her>"
 
 def generate_coarse_to_fine_grid_sweep(
     min_, max_, total_steps, step_sizes=[10, 5, 3, 1], type_="log"
@@ -50,7 +50,7 @@ def rearrange_coarse_to_fine(grid: List, step_sizes=[10, 5, 3, 1]):
 def get_history(
     *sweep_ids,
     unique_cols: Union[List[str], str] = "weight_decay",
-    entity: str = "jqhoogland",
+    entity: str = ENTITY,
     project: str = "grokking",
     allow_duplicates=False,
     combine_seeds=False,
