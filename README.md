@@ -15,7 +15,7 @@ This will initialize a sweep.
 To run the sweep, run the following command:
 
 ```shell
-wandb agent <sweep_id> --function train
+wandb agent <sweep_id>
 ```
 
 where `<sweep_id>` is the id of the sweep you want to run. You can find the sweep id by running `wandb sweep ls`.
@@ -32,5 +32,5 @@ CUDA_VISIBLE_DEVICES=1 wandb agent <sweep_id> &
 
 ## Toy Model
 
-### Fitting the toy model
+See the jupyter notebooks in `toy_models` for more instructions.
 
