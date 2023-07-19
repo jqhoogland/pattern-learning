@@ -10,10 +10,8 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm.notebook import tqdm
 
 import wandb
-from patterns.dataset import ModularArithmetic, Operator, LabelNoiseDataLoader
-from patterns.transformer import Transformer
+from patterns.shared.data import LabelNoiseDataLoader
 from patterns.utils import generate_run_name
-
 
 Reduction = Literal["mean", "sum"]
 

@@ -2,59 +2,20 @@
 import json
 import math
 import warnings
-from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union, Protocol
+from typing import Dict, List, Literal, Optional, Protocol, Tuple, TypedDict, Union
 
 import blobfile as bf
 import numpy as np
 import torch
 from torch import LongTensor, Tensor
-from torch.utils.data import Dataset, Subset, DataLoader, TensorDataset
+from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
+
+from patterns.arithmetic.utils import is_prime, modular_division, modular_exponentiation
 
 DEFAULT_MODULUS = 97
 DEFAULT_DATA_DIR = "data"
 
 Operator = Literal["/", "*", "+", "-", "^", "**"]
-
-
-def is_prime(n: int):
-    """Checks if a number is prime."""
-    return n > 1 and all(n % i for i in range(2, math.floor(math.sqrt(n))))
-
-
-def modular_exponentiation(base, exponent, modulus):
-    result = 1
-    base = base % modulus
-    while exponent > 0:
-        if exponent % 2 == 1:
-            result = (result * base) % modulus
-        exponent = exponent // 2
-        base = (base * base) % modulus
-    return result
-
-
-def modular_division(a, b, p):
-    b_inv = modular_exponentiation(b, p - 2, p)
-    return (a * b_inv) % p
-
-
-def draw_arithmetic_table(data, labels):
-    """Draws an arithmetic table using matshow"""
-    # Unique numbers in data[:, 0]
-    xs = np.array(sorted(list(set([x for x, _, _ in data]))))
-    ys = np.array(sorted(list(set([y for _, y, _ in data]))))
-
-    table = np.zeros((len(xs), len(ys)))
-
-    for (i, j, _), z in zip(data, labels):
-        table[i, j] = z
-
-    import matplotlib.pyplot as plt
-
-    plt.matshow(table)
-    plt.xticks(range(len(ys)), ys)
-    plt.yticks(range(len(xs)), xs)
-
-    plt.show()
 
 
 class ModularArithmetic(Dataset):
@@ -153,7 +114,6 @@ class ModularArithmetic(Dataset):
             shuffle=shuffle,
         )
 
-
         return cls(data=data, labels=labels, metadata=metadata)
 
     def split(
@@ -212,7 +172,6 @@ class ModularArithmetic(Dataset):
             frac_train=frac_train,
         )
 
-
     def load_data(self, root: str) -> Tuple[Tensor, Tensor]:
         return torch.load(bf.join(root, "data.pt"))
 
@@ -234,63 +193,3 @@ class ModularArithmetic(Dataset):
 
     def __repr__(self) -> str:
         return f"ModularArithmetic({len(self)}, {self.metadata})"
-
-
-class LabelNoiseConfig(Protocol):
-    batch_size: int
-    num_workers: int
-    frac_label_noise: float
-    apply_noise_to_test: bool
-
-
-class LabelNoiseDataLoader(DataLoader):
-
-    def __init__(self, original_dataset: Dataset, frac_label_noise: float, subsample=1., **kwargs) -> None:
-        self.frac_label_noise = frac_label_noise
-        self.original = DataLoader(original_dataset, **kwargs)
-
-        # Create a copy of the dataset with noise applied
-        data, labels = original_dataset.data.clone(), original_dataset.targets.clone()
-
-        # Change data to float32
-        data = data.float()
-        
-        data, labels, _, corrupt_indices = self.apply_noise(data, labels, frac_label_noise=frac_label_noise)
-        dataset = TensorDataset(data, labels)         
-
-        # Create subset of samples in dataset without noise
-        uncorrupted_indices = [i for i in range(len(dataset)) if i not in corrupt_indices]
-        uncorrupted_subset = Subset(dataset, uncorrupted_indices)
-        self.uncorrupted = DataLoader(uncorrupted_subset, **kwargs)
-
-        # Create subset of samples in dataset with noise
-        corrupted_subset = Subset(dataset, corrupt_indices)
-
-        if not frac_label_noise:
-            self.corrupted = []
-        else:
-            self.corrupted = DataLoader(corrupted_subset, **kwargs)
-        
-        if subsample < 1.0:  # Always applied
-            indices = torch.randperm(len(dataset))[
-                : int(len(dataset) * subsample)
-            ].tolist()
-            
-            dataset = Subset(dataset, indices)
-
-        super().__init__(dataset, **kwargs)
-    
-    @staticmethod
-    def apply_noise(data, true_targets, frac_label_noise: float = 0.0):
-        # Apply label noise
-        labels = true_targets.clone()
-
-        if frac_label_noise > 0:
-            num_noise = int(frac_label_noise * len(data))
-            corrupt_indices = torch.randperm(len(data))[:num_noise]
-            noise_to = corrupt_indices.roll(1)
-            true_targets[corrupt_indices] = true_targets[noise_to]
-        else:
-            corrupt_indices = torch.tensor([], dtype=torch.long)
-
-        return data, labels, true_targets, corrupt_indices

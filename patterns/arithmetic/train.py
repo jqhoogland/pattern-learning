@@ -1,9 +1,6 @@
 import os
 import sys
 
-# Should be run from the top-level dir
-sys.path.append(os.path.abspath(os.getcwd()))
-
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -20,19 +17,20 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import wandb
-from patterns.dataset import ModularArithmetic, Operator
-from patterns.grokking import GrokkingConfig, GrokkingLearner
-from patterns.transformer import Transformer
+from patterns.arithmetic.data import ModularArithmetic, Operator
+from patterns.arithmetic.learner import (ModularArithmeticConfig,
+                                         ModularArithmeticLearner)
+from patterns.shared.model import Transformer
 from patterns.utils import generate_run_name
 
 PROJECT = "grokking"
 
-parser = ArgumentParser(GrokkingConfig)
+parser = ArgumentParser(ModularArithmeticConfig)
 
 try:
     default_config = parser.parse_args()
 except:
-    default_config = GrokkingConfig()
+    default_config = ModularArithmeticConfig()
 
 
 def main():
@@ -46,14 +44,14 @@ def main():
         config=asdict(default_config),  # Default config
     )
 
-    # GrokkingConfig
-    config = GrokkingConfig(**wandb.config)
+    # ModularArithmeticConfig
+    config = ModularArithmeticConfig(**wandb.config)
 
     print("\nConfig:")
     print(yaml.dump(asdict(config), default_flow_style=False))
 
     # Model
-    learner = GrokkingLearner.create(config)
+    learner = ModularArithmeticLearner.create(config)
     wandb.watch(learner.model)
 
     # Training

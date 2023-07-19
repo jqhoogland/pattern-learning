@@ -1,8 +1,5 @@
 import os
 import sys
-
-sys.path.append(os.path.abspath(os.getcwd()))
-
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -14,18 +11,17 @@ from typing import Callable, List, Literal, Optional, Tuple, Union
 import ipywidgets as widgets
 import torch
 import torch.nn.functional as F
+import wandb
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 from tqdm.notebook import tqdm
-from argparse_dataclass import ArgumentParser
 
-import wandb
-from patterns.learner import BaseLearner,  Reduction
-from patterns.transformer import Transformer
+from patterns.shared.learner import BaseLearner, Reduction
+from patterns.shared.model import Transformer
 from patterns.utils import generate_run_name, wandb_run
-from patterns.vision import ExtModule, VisionConfig, VisionLearner
+from patterns.vision.learner import ExtModule, VisionConfig, VisionLearner
 
 # Normalize & transform to tensors
 mnist_train = MNIST(
@@ -46,57 +42,74 @@ mnist_test = MNIST(
 )
 
 
-class MLP(ExtModule):
-    def __init__(
-        self, in_size: int, num_layers: int, num_classes: int, width: int, **kwargs
-    ):
-        super().__init__(**kwargs)
+class CNN(nn.Module):
+    """4 Conv layers + 1 FCN"""
 
-        self.in_size = in_size
+    def __init__(self, growth_rate=8, num_layers=3, num_classes=10):
+        self.growth_rate = growth_rate
         self.num_layers = num_layers
         self.num_classes = num_classes
-        self.width = width
 
-        layers: List[nn.Module] = [nn.Flatten(), nn.Linear(in_size, width), nn.ReLU()]
+        super().__init__()
 
-        for _ in range(num_layers - 1):
-            layers.append(nn.Linear(width, width))
-            layers.append(nn.ReLU())
+        conv_layers = []
 
-        layers.append(nn.Linear(width, num_classes))
-        self.layers = nn.Sequential(*layers)
+        def add_layer(n_channels_before, n_channels_after):
+            conv_layers.append(
+                nn.Conv2d(
+                    n_channels_before,
+                    n_channels_after,
+                    3,
+                    padding=1,
+                    stride=1,
+                    bias=True,
+                )
+            )
+            conv_layers.append(nn.BatchNorm2d(n_channels_after))
+            conv_layers.append(nn.ReLU())
+            conv_layers.append(nn.MaxPool2d(2))
 
-        self.init_weights()
+        add_layer(1, growth_rate)
+
+        for i in range(num_layers - 1):
+            n_channels_before, n_channels_after = growth_rate * (
+                2**i
+            ), growth_rate * (2 ** (i + 1))
+            add_layer(n_channels_before, n_channels_after)
+
+        self.encoder = nn.Sequential(*conv_layers)
+
+        self.decoder = nn.Sequential(
+            # nn.MaxPool2d(4),
+            nn.Flatten(),
+            nn.Linear(128 * 3 * 3, num_classes),
+        )
 
     def forward(self, x):
-        return self.layers(x)
-
-    def parameter_groups(self):
-        return [l.parameters() for l in self.layers if isinstance(l, nn.Linear)]
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
 
 
 @dataclass
-class MNISTConfig(VisionConfig):
+class CNNConfig(VisionConfig):
     # Model
     in_size: int = 784
-    num_layers: int = 2
+    num_layers: int = 3
     num_classes: int = 10
-    width: int = 200
+    growth_rate: int = 8
 
 
-class MNISTLearner(VisionLearner):
-    Config = MNISTConfig
+class CNNLearner(VisionLearner):
+    Config = CNNConfig
     Dataset = Union[MNIST, Subset[MNIST]]
 
     @classmethod
     def get_model(cls, config: Config) -> nn.Module:
-        model = MLP(
-            in_size=config.in_size,
+        model = CNN(
             num_layers=config.num_layers,
             num_classes=config.num_classes,
-            width=config.width,
-            init_scale=config.init_scale,
-            init_mode=config.init_mode, # "uniform",                    
+            growth_rate=config.growth_rate,
         )
 
         if config.load_path is not None:
@@ -119,47 +132,57 @@ class MNISTLearner(VisionLearner):
         return F.mse_loss(logits, one_hot_targets, reduction=reduction)
 
 
-PROJECT = "mnist-grokking"
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-DEFAULT_MNIST_CONFIG = MNISTConfig(
-    wandb_project=PROJECT,
-    frac_train=0.0167,
-    frac_label_noise=0.1,
-    batch_size=256,  # 1000 / 200 = 5 steps per epoch
-    num_training_steps=100_000,  # = 10,000 epochs
-    # num_training_steps=int(1e6), #  = 200,000 epochs
-    num_layers=5,
-    width=200,
-    init_mode="uniform",
-    init_scale=4.0,
-    lr=0.0000025,
-    max_lr=0.02,
-    lr_factor=6.,
-    weight_decay=1e-2,
-    device=DEVICE,
-    use_sgd=False,
-    apply_noise_to_test=True,
-    seed=1,
-    # criterion="mse"
+mnist_train = MNIST(
+    root="data",
+    train=True,
+    download=True,
+    transform=transforms.ToTensor(),
 )
 
-""" parser = ArgumentParser(MNISTConfig)
+mnist_test = MNIST(
+    root="data",
+    train=False,
+    download=True,
+    transform=transforms.ToTensor(),
+)
 
-try:
-    default_config = parser.parse_args()
-except:
- """
-default_config = DEFAULT_MNIST_CONFIG
+mnist_learner = CNNLearner.create(
+    mnist_config,
+    mnist_train,
+    mnist_test,
+)
+
+PROJECT = "mnist-grokking"
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEFAULT_MNIST_CONFIG = CNNConfig(
+    num_layers=3,
+    growth_rate=32,
+    init_scale=1.0,
+    momentum=(0.8, 0.9),
+    #
+    wandb_project=PROJECT,
+    frac_train=1 / 20.0,
+    frac_label_noise=0.2,
+    batch_size=256,
+    num_training_steps=int(1e6),
+    init_mode="uniform",
+    lr=1e-3,  # 1e-3
+    weight_decay=1e-2,  # 1e-2
+    seed=0,
+    device=DEVICE,
+    use_sgd=False
+    # criterion="mse"
+)
 
 
 def main():
     # Logging
     with wandb_run(
         project=PROJECT,
-        config=asdict(default_config),
+        config=asdict(DEFAULT_MNIST_CONFIG),
     ):
-        config = MNISTConfig(**wandb.config)
-        learner = MNISTLearner.create(
+        config = CNNConfig(**wandb.config)
+        learner = CNNLearner.create(
             config,
             mnist_train,
             mnist_test,

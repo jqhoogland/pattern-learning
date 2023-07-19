@@ -2,6 +2,14 @@
 
 ## Interpolating between grokking and double descent
 
+## Set-up 
+
+
+```shell
+pip install -r requirements.txt
+pip install -e .
+```
+
 ## Running the sweeps
 
 Replace `config.yml` in the following with the relevant config file:

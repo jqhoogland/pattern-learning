@@ -8,30 +8,8 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 
-from patterns.learner import BaseLearner, Config, Reduction
-from patterns.dataset import LabelNoiseDataLoader
-
-
-class ExtModule(nn.Module):
-    def __init__(
-        self,
-        init_scale: float = 1.0,
-        init_mode: Literal["uniform", "normal"] = "uniform",
-        **kwargs
-    ):
-        super().__init__(**kwargs)
-
-        self.init_scale = init_scale
-        self.init_mode = init_mode
-
-    def init_weights(self):
-        for p in self.parameters():
-            # if self.init_mode == "uniform":
-            #     nn.init.kaiming_uniform_(p.data, a=0, mode='fan_in', nonlinearity='relu')
-            # else:
-            #     nn.init.kaiming_normal_(p.data, a=0, mode='fan_in', nonlinearity='relu')
-
-            p.data *= self.init_scale
+from patterns.shared.data import LabelNoiseDataLoader
+from patterns.shared.learner import BaseLearner, Config, Reduction
 
 
 @dataclass
@@ -48,7 +26,6 @@ class VisionConfig(Config):
 class VisionLearner(BaseLearner):
     Config = VisionConfig
     Dataset = Union[VisionDataset, Subset[VisionDataset]]
-
 
     @staticmethod
     def get_loader(config: Config, dataset: Dataset, train=True) -> LabelNoiseDataLoader:

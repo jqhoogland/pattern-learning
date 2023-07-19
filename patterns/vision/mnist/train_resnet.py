@@ -1,8 +1,6 @@
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.getcwd()))
-
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -21,10 +19,10 @@ from torchvision.datasets import CIFAR10, MNIST, VisionDataset
 from tqdm.notebook import tqdm
 
 import wandb
-from patterns.learner import BaseLearner, Reduction
-from patterns.transformer import Transformer
+from patterns.shared.learner import BaseLearner, Reduction
+from patterns.shared.model import Transformer
 from patterns.utils import generate_run_name, wandb_run
-from patterns.vision import ExtModule, VisionConfig, VisionLearner
+from patterns.vision.learner import ExtModule, VisionConfig, VisionLearner
 
 # Normalize & transform to tensors
 mnist_train = MNIST(

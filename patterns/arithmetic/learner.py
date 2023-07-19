@@ -10,15 +10,16 @@ from torch.utils.data import DataLoader
 from tqdm.notebook import tqdm
 
 import wandb
-from patterns.dataset import ModularArithmetic, Operator
-from patterns.transformer import Transformer
+from patterns.arithmetic.data import ModularArithmetic, Operator
+from patterns.shared.learner import BaseLearner, Config, Reduction
+from patterns.shared.model import Transformer
 from patterns.utils import generate_run_name
-from patterns.learner import BaseLearner, Config, Reduction
 
 DEFAULT_MODULUS = 113
 
+
 @dataclass
-class GrokkingConfig(Config):
+class ModularArithmeticConfig(Config):
     # Model
     num_layers: int = 1
     num_heads: int = 4
@@ -57,8 +58,8 @@ class GrokkingConfig(Config):
         super().__post_init__()
 
 
-class GrokkingLearner(BaseLearner):
-    Config = GrokkingConfig
+class ModularArithmeticLearner(BaseLearner):
+    Config = ModularArithmeticConfig
 
     @classmethod
     def get_model(cls, config: Config) -> nn.Module:
@@ -119,7 +120,7 @@ class GrokkingLearner(BaseLearner):
         return acc
 
     @classmethod
-    def create(cls, config: GrokkingConfig):
+    def create(cls, config: ModularArithmeticConfig):
         trainset, testset = ModularArithmetic.generate_split(
             operator=config.operator,
             modulus=config.modulus,

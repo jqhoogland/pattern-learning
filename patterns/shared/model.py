@@ -2,7 +2,7 @@
 Based on [Neel Nanda's implementation](https://colab.research.google.com/drive/1F6_1_cWXE5M7WocUcpQWp3v8z4b1jL20).
 """
 
-from typing import Callable, List, Tuple, Union
+from typing import Callable, List, Literal, Tuple, Union
 
 import einops
 import numpy as np
@@ -10,6 +10,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor, tensor
+
+
+class ExtModule(nn.Module):
+    def __init__(
+        self,
+        init_scale: float = 1.0,
+        init_mode: Literal["uniform", "normal"] = "uniform",
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+
+        self.init_scale = init_scale
+        self.init_mode = init_mode
+
+    def init_weights(self):
+        for p in self.parameters():
+            # if self.init_mode == "uniform":
+            #     nn.init.kaiming_uniform_(p.data, a=0, mode='fan_in', nonlinearity='relu')
+            # else:
+            #     nn.init.kaiming_normal_(p.data, a=0, mode='fan_in', nonlinearity='relu')
+
+            p.data *= self.init_scale
 
 
 class Embed(nn.Module):
