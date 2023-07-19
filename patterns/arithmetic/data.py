@@ -41,7 +41,6 @@ class ModularArithmetic(Dataset):
         data: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         root: Optional[str] = None,
-        wrong_indices: Optional[torch.Tensor] = None,
         metadata: Metadata = {},
     ) -> None:
         """
