@@ -9,8 +9,6 @@ parameters:
         value: 100000
     num_training_steps: 
         value: 100000
-    frac_train:
-        value: 0.4
     weight_decay:
         value: 0.3
     d_model:

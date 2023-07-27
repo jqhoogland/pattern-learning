@@ -15,7 +15,6 @@ BLUES = sns.dark_palette("#79C", as_cmap=True)
 REDS = sns.dark_palette((20, 60, 50), input="husl", as_cmap=True)
 
 
-
 # Heatmap
 def create_heatmap(
     x,

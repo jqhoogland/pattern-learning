@@ -4,7 +4,6 @@ from datetime import datetime
 
 import wandb
 
-
 def generate_run_name(
     config: dict, aliases=None, droppable=None, append_hash=False, bool_aliases=None
 ):

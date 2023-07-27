@@ -1,3 +1,4 @@
+import os
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
 import numpy as np
@@ -7,8 +8,20 @@ from scipy.ndimage import gaussian_filter
 import wandb
 
 OutlierStrategy = Literal["remove", "replace", "keep"]
-METRICS= ["train/acc", "test/acc", "train/loss", "test/loss", "corrupted/acc", "uncorrupted/acc"]
-ENTITY = "<Insert entity her>"
+METRICS = [
+    "train/acc",
+    "test/acc",
+    "train/loss",
+    "test/loss",
+    "corrupted/acc",
+    "uncorrupted/acc",
+]
+
+ENTITY = os.environ.get("WANDB_ENTITY", None)
+
+if ENTITY is None:
+    raise ValueError("WANDB_ENTITY environment variable not set")
+
 
 def generate_coarse_to_fine_grid_sweep(
     min_, max_, total_steps, step_sizes=[10, 5, 3, 1], type_="log"
@@ -46,7 +59,6 @@ def rearrange_coarse_to_fine(grid: List, step_sizes=[10, 5, 3, 1]):
     return rearranged_grid
 
 
-
 def get_history(
     *sweep_ids,
     unique_cols: Union[List[str], str] = "weight_decay",
@@ -54,7 +66,7 @@ def get_history(
     project: str = "grokking",
     allow_duplicates=False,
     combine_seeds=False,
-    metrics=METRICS
+    metrics=METRICS,
 ):
     """
     Gathers all the runs from a series of sweeps and combines them into a single dataframe.
@@ -117,7 +129,9 @@ def get_history(
                     means_groups = runs.groupby("_step")[metric]
 
                     means = means_groups.apply(
-                        lambda x: x.ffill().bfill().mean() if x.isna().any() else x.mean()
+                        lambda x: x.ffill().bfill().mean()
+                        if x.isna().any()
+                        else x.mean()
                     )
 
                     # Update the histories dataframe
@@ -259,16 +273,20 @@ def extract_slice_from_pivot(
 
 def exp_filter(z, sigma):
     z = gaussian_filter(z, sigma=sigma, mode="nearest")
-    
+
     return z
 
 
-def extract_run_from_pivot(pivot_table, run_val, smooth: Union[bool, float]=False, metrics=METRICS):
+def extract_run_from_pivot(
+    pivot_table, run_val, smooth: Union[bool, float] = False, metrics=METRICS
+):
     _pivot_table = pivot_table.copy()
 
     if smooth:
         for metric in metrics:
-            _pivot_table[metric] = exp_filter(pivot_table[metric].values, sigma=(smooth))
+            _pivot_table[metric] = exp_filter(
+                pivot_table[metric].values, sigma=(smooth)
+            )
 
     run = _pivot_table[[(m, run_val) for m in metrics]]
     run = run.reset_index()

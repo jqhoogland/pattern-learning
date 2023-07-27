@@ -20,10 +20,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import wandb
-from patterns.arithmetic.learner import (
-    ModularArithmeticConfig,
-    ModularArithmeticLearner,
-)
+from patterns.arithmetic.learner import (ModularArithmeticConfig,
+                                         ModularArithmeticLearner)
 from patterns.shared.model import Transformer
 from patterns.utils import generate_run_name
 
