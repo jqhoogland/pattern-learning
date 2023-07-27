@@ -1,6 +1,6 @@
 method: grid
 name: frac-train-wise-grokking
-program: train.py
+program: patterns/arithmetic/train.py
 parameters:
     weight_decay:
         value: 0.3

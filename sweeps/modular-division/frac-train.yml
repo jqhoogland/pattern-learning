@@ -1,6 +1,6 @@
 method: grid
 name: division-frac-train
-program: unifying/arithmetic/train.py
+program: patterns/arithmetic/train.py
 project: grokking
 parameters:
     operator:
@@ -13,3 +13,5 @@ parameters:
         value: 150
     frac_train:
         values: [0.05, 0.5, .95, 0.2, 0.4, 0.6, 0.8, 0.1, 0.3, 0.7, 0.9, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85]
+    seed:
+        values: [1, 2, 3, 4, 5]
