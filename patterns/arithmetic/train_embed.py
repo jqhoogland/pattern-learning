@@ -23,10 +23,9 @@ import wandb
 from patterns.arithmetic.learner import (ModularArithmeticConfig,
                                          ModularArithmeticLearner)
 from patterns.shared.model import Transformer
-from patterns.utils import generate_run_name
+from patterns.utils import generate_run_name, parse_arguments, wandb_run
 
 PROJECT = "grokking"
-
 
 @dataclass
 class EmbeddedModularArithmeticConfig(ModularArithmeticConfig):
@@ -34,72 +33,56 @@ class EmbeddedModularArithmeticConfig(ModularArithmeticConfig):
         300  # A trick for consistently initializing the weights of smaller models
     )
 
-
-default_config = EmbeddedModularArithmeticConfig()
+default_config = parse_arguments(EmbeddedModularArithmeticConfig)
 
 
 def main():
-    # Logging
-    run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-
-    wandb.init(
+    with wandb_run(
         project=PROJECT,
-        id=run_id,
-        settings=wandb.Settings(start_method="thread"),
-        config=asdict(default_config),  # Default config
-    )
+        config=asdict(default_config),
+        config_cls=EmbeddedModularArithmeticConfig,
+    ) as config:
+        embedding_config = EmbeddedModularArithmeticConfig(**asdict(config))
+        embedding_config.d_model = embedding_config.embed_dim
+        embedding_model = ModularArithmeticLearner.create(embedding_config).model
 
-    # ModularArithmeticConfig
-    config = EmbeddedModularArithmeticConfig(**wandb.config)
+        learner = ModularArithmeticLearner.create(config)
 
-    print("\nConfig:")
-    print(yaml.dump(asdict(config), default_flow_style=False))
+        # Embedding
+        for p1, p2 in zip(embedding_model.parameters(), learner.model.parameters()):
+            embedded_shape = p2.shape
 
-    # Model
-    embedding_config = EmbeddedModularArithmeticConfig(**wandb.config)
-    embedding_config.d_model = embedding_config.embed_dim
-    embedding_model = ModularArithmeticLearner.create(embedding_config).model
+            try:
+                print(f"Embedding {p2.shape} in {p1.shape}")
+                if len(p1.shape) == 1:
+                    p2.data[:] = p1.data[: embedded_shape[0]]
+                elif len(p1.shape) == 2:
+                    p2.data[:, :] = p1.data[: embedded_shape[0], : embedded_shape[1]]
+                elif len(p1.shape) == 3:
+                    p2.data[:, :, :] = p1.data[
+                        : embedded_shape[0], : embedded_shape[1], : embedded_shape[2]
+                    ]
+                elif len(p1.shape) == 4:
+                    p2.data[:, :, :, :] = p1.data[
+                        : embedded_shape[0],
+                        : embedded_shape[1],
+                        : embedded_shape[2],
+                        : embedded_shape[3],
+                    ]
+                else:
+                    raise ValueError(
+                        f"Embedding model has shape {p1.shape} but learner model has shape {p2.shape}. Not embeddable."
+                    )
 
-    learner = ModularArithmeticLearner.create(config)
-
-    # Embedding
-    for p1, p2 in zip(embedding_model.parameters(), learner.model.parameters()):
-        embedded_shape = p2.shape
-
-        try:
-            print(f"Embedding {p2.shape} in {p1.shape}")
-            if len(p1.shape) == 1:
-                p2.data[:] = p1.data[: embedded_shape[0]]
-            elif len(p1.shape) == 2:
-                p2.data[:, :] = p1.data[: embedded_shape[0], : embedded_shape[1]]
-            elif len(p1.shape) == 3:
-                p2.data[:, :, :] = p1.data[
-                    : embedded_shape[0], : embedded_shape[1], : embedded_shape[2]
-                ]
-            elif len(p1.shape) == 4:
-                p2.data[:, :, :, :] = p1.data[
-                    : embedded_shape[0],
-                    : embedded_shape[1],
-                    : embedded_shape[2],
-                    : embedded_shape[3],
-                ]
-            else:
+            except IndexError:
                 raise ValueError(
                     f"Embedding model has shape {p1.shape} but learner model has shape {p2.shape}. Not embeddable."
                 )
+    
+        if not config.no_wandb:
+            wandb.watch(learner.model)
 
-        except IndexError:
-            raise ValueError(
-                f"Embedding model has shape {p1.shape} but learner model has shape {p2.shape}. Not embeddable."
-            )
-
-    wandb.watch(learner.model)
-
-    # Training
-    try:
         learner.train()
-    except KeyboardInterrupt:
-        wandb.finish()
 
 
 if __name__ == "__main__":

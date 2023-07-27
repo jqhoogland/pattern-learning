@@ -1,3 +1,4 @@
+import os
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
@@ -7,7 +8,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset
-from tqdm.notebook import tqdm
+
+if os.getenv('USE_TQDM_NOTEBOOK', 'NO').lower() in ['yes', 'true', '1']:
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
 
 import wandb
 from patterns.shared.data import LabelNoiseDataLoader
@@ -57,6 +62,8 @@ class Config:
     data_seed: int = 0
     frac_label_noise: float = 0.0   
     apply_noise_to_test: bool = False
+
+    no_wandb: bool = False
 
     def __post_init__(self):
         if self.no_logging:
@@ -140,7 +147,9 @@ class BaseLearner:
         step = 0
 
         metrics = self.validate()
-        wandb.log(metrics, step=step)
+
+        if not self.config.no_wandb:
+            wandb.log(metrics, step=step)
 
         for epoch in tqdm(
             range(1, int(self.config.num_training_steps / steps_per_epoch) + 1)
@@ -154,7 +163,9 @@ class BaseLearner:
                     or step % 1000 == 0
                 ) and step > 0:
                     metrics = self.validate()
-                    wandb.log(metrics, step=step)
+
+                    if not self.config.no_wandb:
+                        wandb.log(metrics, step=step)
 
                 self.model.train()
                 x, y = x.to(self.config.device), y.to(self.config.device)
@@ -168,7 +179,9 @@ class BaseLearner:
                 step += 1
 
         metrics = self.validate()
-        wandb.log(metrics, step=step)
+
+        if not self.config.no_wandb:
+            wandb.log(metrics, step=step)
 
     def save(self, path: Optional[str]):
         path = path or f"{self.config.weights_dir}/{self.name}.pt"

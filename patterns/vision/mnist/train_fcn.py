@@ -4,24 +4,27 @@ from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from datetime import datetime
-
 # import cifar10
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
 import ipywidgets as widgets
 import torch
 import torch.nn.functional as F
-import wandb
 from argparse_dataclass import ArgumentParser
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, VisionDataset
-from tqdm.notebook import tqdm
 
+if os.getenv('USE_TQDM_NOTEBOOK', 'NO').lower() in ['yes', 'true', '1']:
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
+
+import wandb
 from patterns.shared.learner import BaseLearner, Reduction
 from patterns.shared.model import Transformer
-from patterns.utils import generate_run_name, wandb_run
+from patterns.utils import generate_run_name, parse_arguments, wandb_run
 from patterns.vision.learner import ExtModule, VisionConfig, VisionLearner
 
 # Normalize & transform to tensors
@@ -118,7 +121,9 @@ class MNISTLearner(VisionLearner):
 
 PROJECT = "mnist-grokking"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-DEFAULT_MNIST_CONFIG = MNISTConfig(
+
+default_config = parse_arguments(
+    MNISTConfig,     
     wandb_project=PROJECT,
     frac_train=0.0167,
     frac_label_noise=0.1,
@@ -137,31 +142,25 @@ DEFAULT_MNIST_CONFIG = MNISTConfig(
     use_sgd=False,
     apply_noise_to_test=True,
     seed=1,
-    # criterion="mse"
+    # criterion="mse")
 )
-
-""" parser = ArgumentParser(MNISTConfig)
-
-try:
-    default_config = parser.parse_args()
-except:
- """
-default_config = DEFAULT_MNIST_CONFIG
-
 
 def main():
     # Logging
     with wandb_run(
         project=PROJECT,
         config=asdict(default_config),
-    ):
-        config = MNISTConfig(**wandb.config)
+        config_cls=MNISTConfig,
+    ) as config:
         learner = MNISTLearner.create(
             config,
             mnist_train,
             mnist_test,
         )
-        wandb.watch(learner.model)
+
+        if not config.no_wandb:
+            wandb.watch(learner.model)
+
         learner.train()
 
 

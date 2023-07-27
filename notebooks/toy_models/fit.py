@@ -1,3 +1,4 @@
+import os
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -13,7 +14,11 @@ import torch
 import torch.nn.functional as F
 from matplotlib.colors import LogNorm
 from torch import nn, optim
-from tqdm.notebook import tqdm
+
+if os.getenv('USE_TQDM_NOTEBOOK', 'NO').lower() in ['yes', 'true', '1']:
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
 
 import wandb
 

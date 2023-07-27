@@ -1,3 +1,4 @@
+import os
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
@@ -7,9 +8,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn, optim
 from torch.utils.data import DataLoader
-from tqdm.notebook import tqdm
 
-import wandb
+if os.getenv('USE_TQDM_NOTEBOOK', 'NO').lower() in ['yes', 'true', '1']:
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
+
 from patterns.arithmetic.data import ModularArithmetic, Operator
 from patterns.shared.learner import BaseLearner, Config, Reduction
 from patterns.shared.model import Transformer

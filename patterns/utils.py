@@ -1,8 +1,14 @@
+import argparse
 import hashlib
 from contextlib import contextmanager
+from dataclasses import asdict
 from datetime import datetime
+from typing import Type
+
+import yaml
 
 import wandb
+
 
 def generate_run_name(
     config: dict, aliases=None, droppable=None, append_hash=False, bool_aliases=None
@@ -42,14 +48,47 @@ def generate_run_name(
 
 
 @contextmanager
-def wandb_run(**kwargs):
+def wandb_run(config_cls: Type, config: dict, **kwargs):
     try:
         run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-        kwargs.setdefault("settings", wandb.Settings(start_method="thread"))
-        kwargs.setdefault("id", run_id)
-        wandb.init(**kwargs)
 
-        yield
+        if not config.get("no_wandb", False):
+            kwargs.setdefault("settings", wandb.Settings(start_method="thread"))
+            kwargs.setdefault("id", run_id)
+            wandb.init(config=config, **kwargs)
+            config_ = config_cls(**wandb.config)
+
+            print("\nConfig:")
+            print(yaml.dump(asdict(config_), default_flow_style=False))
+
+        else:
+            config_ = config_cls(**config)
+
+        yield config_
 
     finally:
-        wandb.finish()
+        if config["no_wandb"]:
+            wandb.finish()
+
+def parse_arguments(dataclass_type: Type, description="Model Configuration", **kwargs):
+    parser = argparse.ArgumentParser(description=description)
+    
+    # Convert dataclass to dictionary to loop through fields
+    default_config = asdict(dataclass_type())
+
+    # For each field in the dataclass, add an argument to the parser
+    for field, default_value in default_config.items():
+        if field in kwargs:
+            default_value = kwargs[field]
+
+        if isinstance(default_value, bool):
+            parser.add_argument(f"--{field}", type=bool, default=default_value, help=f"Set {field} (default: {default_value})")
+        else:
+            parser.add_argument(f"--{field}", type=type(default_value), default=default_value, help=f"Set {field} (default: {default_value})")
+    
+    args = parser.parse_args()
+    
+    # Convert args namespace to dictionary and then to the dataclass
+    config = dataclass_type(**vars(args))
+
+    return config
