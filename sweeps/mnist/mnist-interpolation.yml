@@ -19,12 +19,10 @@ parameters:
         value: 4.
     lr_factor:
         values: [1., 6., 3.5, 2., 3., 4., 5., 1.5, 2.5, 4.5, 5.5, 1.25, 1.75, 2.25, 2.75, 3.25, 3.75, 4.25, 4.75, 5.25, 5.75] 
-    max_lr:
-        value: null  # Don't use this!
     lr:
         value: 0.0000025
     apply_noise_to_test:
         value: True
     seed:
-        values: [0, 2, 3, 4, 5]
+        values: [0, 1, 2, 3, 4, 5]
         # value: 1
