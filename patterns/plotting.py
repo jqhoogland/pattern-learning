@@ -392,6 +392,6 @@ def plot_all_details(
             plot_extra=plot_extra,
         )
         slug = metric.replace("/", "_")
-        fig.savefig(f"../figures/{unique_col}_{slug}.{format}", dpi=300)
+        fig.savefig(f"../../figures/{unique_col}_{slug}.{format}", dpi=300)
         plt.show()
 

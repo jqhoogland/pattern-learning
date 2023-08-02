@@ -23,9 +23,9 @@ else:
 
 import wandb
 from patterns.shared.learner import BaseLearner, Reduction
-from patterns.shared.model import Transformer
+from patterns.shared.model import ExtModule, Transformer
 from patterns.utils import generate_run_name, parse_arguments, wandb_run
-from patterns.vision.learner import ExtModule, VisionConfig, VisionLearner
+from patterns.vision.learner import VisionConfig, VisionLearner
 
 # Normalize & transform to tensors
 mnist_train = MNIST(
@@ -135,7 +135,7 @@ default_config = parse_arguments(
     init_mode="uniform",
     init_scale=4.0,
     lr=0.0000025,
-    max_lr=0.02,
+    max_lr=None,
     lr_factor=6.0,
     weight_decay=1e-2,
     device=DEVICE,

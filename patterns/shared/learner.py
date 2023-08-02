@@ -320,10 +320,10 @@ class BaseLearner:
             lr = config.lr
             lrs = [lr * (config.lr_factor ** i) for i in range(len(groups))]
 
-            if config.max_lr: 
-                # Rescale learning rate so that the maximum learning rate is config.max_lr
-                factor = config.max_lr / max(lrs)
-                lrs = [lr * factor for lr in lrs]
+            # if config.max_lr: 
+            #     # Rescale learning rate so that the maximum learning rate is config.max_lr
+            #     factor = config.max_lr / max(lrs)
+            #     lrs = [lr * factor for lr in lrs]
 
             print(f"Learning rates for parameter groups: {lrs}")
 

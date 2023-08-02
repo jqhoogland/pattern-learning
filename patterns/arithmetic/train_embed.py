@@ -14,7 +14,6 @@ import ipywidgets as widgets
 import torch
 import torch.nn.functional as F
 import yaml
-from argparse_dataclass import ArgumentParser
 from torch import nn, optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
