@@ -40,6 +40,7 @@ class Pattern(nn.Module):
         generalization: Optional[float] = None,
         strength: Optional[float] = None,
         speed: Optional[float] = None,
+        exponent: Optional[float] = None,
     ):
         # 4 scalar parameters: strength, speed, onset, generalization
         super().__init__()
@@ -48,12 +49,13 @@ class Pattern(nn.Module):
         speed = speed or torch.rand(1)[0] * 10 / max_time
         onset = onset or torch.rand(1)[0] * max_time
         generalization = generalization or torch.rand(1)[0]
+        exponent = exponent or torch.tensor(1.0)
 
         self._strength = nn.Parameter(self._inv_sigmoid(torch.tensor(strength)))
         self.speed = nn.Parameter(torch.tensor(speed))
         self.onset = nn.Parameter(torch.tensor(onset))
         self._generalization = nn.Parameter(torch.log(torch.tensor(generalization)))
-        self.exponent = nn.Parameter(torch.tensor(1.0))
+        self.exponent = nn.Parameter(torch.tensor(exponent))
 
     @staticmethod
     def _inv_sigmoid(x):
@@ -79,7 +81,7 @@ class Pattern(nn.Module):
         return self.strength * F.sigmoid(self.speed * (t**self.exponent - self.onset))
 
     def __repr__(self):
-        return f"Pattern(strength={self.strength.data.float()}, speed={self.speed.data.float()}, onset={self.onset.data.float()}, generalization={self.generalization.data.float()})"
+        return f"Pattern(strength={self.strength.data.float()}, speed={self.speed.data.float()}, onset={self.onset.data.float()}, generalization={self.generalization.data.float()}, exponent={self.exponent.data.float()})"
 
 
 class PatternLearningModel(nn.Module):
@@ -182,7 +184,7 @@ class PatternLearningModel(nn.Module):
         criterion = nn.MSELoss()
 
         if gamma:
-            scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=None)
+            scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
 
         # Cross-entropy
         # criterion = lambda preds, ys: -torch.sum(ys * torch.log(preds + eps) + (1 - ys) * torch.log(1 - preds + eps))
