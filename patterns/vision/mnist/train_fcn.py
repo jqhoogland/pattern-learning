@@ -10,22 +10,21 @@ from typing import Callable, List, Literal, Optional, Tuple, Union
 import ipywidgets as widgets
 import torch
 import torch.nn.functional as F
-from argparse_dataclass import ArgumentParser
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, VisionDataset
-
-if os.getenv('USE_TQDM_NOTEBOOK', 'NO').lower() in ['yes', 'true', '1']:
-    from tqdm.notebook import tqdm
-else:
-    from tqdm import tqdm
 
 import wandb
 from patterns.shared.learner import BaseLearner, Reduction
 from patterns.shared.model import ExtModule, Transformer
 from patterns.utils import generate_run_name, parse_arguments, wandb_run
 from patterns.vision.learner import VisionConfig, VisionLearner
+
+if os.getenv('USE_TQDM_NOTEBOOK', 'NO').lower() in ['yes', 'true', '1']:
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
 
 # Normalize & transform to tensors
 mnist_train = MNIST(

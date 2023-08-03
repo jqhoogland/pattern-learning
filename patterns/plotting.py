@@ -8,7 +8,7 @@ from matplotlib import cm, colors, gridspec
 from matplotlib.colors import LogNorm
 from scipy.ndimage import gaussian_filter
 
-from .sweep import extract_run, extract_slice, get_pivot, exp_filter
+from patterns.sweep import exp_filter, extract_run, extract_slice, get_pivot
 
 BLUE, RED = sns.color_palette()[0], sns.color_palette()[3]
 BLUES = sns.dark_palette("#79C", as_cmap=True)

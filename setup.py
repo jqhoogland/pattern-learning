@@ -12,9 +12,7 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/anonymous/anonymous",  # Replace with your project's repository URL
-    packages=find_packages(
-        include=["patterns", "patterns.*"]
-    ),  # This includes all sub-packages inside `patterns`
+    packages=find_packages(),  # This includes all sub-packages inside `patterns`
     install_requires=requirements,
     classifiers=[
         "Development Status :: 4 - Beta",

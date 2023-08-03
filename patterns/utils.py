@@ -1,5 +1,7 @@
 import argparse
 import hashlib
+import os
+import warnings
 from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import datetime
@@ -47,14 +49,21 @@ def generate_run_name(
     return run_name
 
 
+
+
 @contextmanager
-def wandb_run(config_cls: Type, config: dict, **kwargs):
+def  wandb_run(config_cls: Type, config: dict, **kwargs):
     try:
         run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
         if not config.get("no_wandb", False):
             kwargs.setdefault("settings", wandb.Settings(start_method="thread"))
             kwargs.setdefault("id", run_id)
+
+            entity = os.environ.get("WANDB_ENTITY", None)
+            if entity:
+                kwargs.setdefault("entity", entity)
+
             wandb.init(config=config, **kwargs)
             config_ = config_cls(**wandb.config)
 
@@ -86,9 +95,11 @@ def parse_arguments(dataclass_type: Type, description="Model Configuration", **k
         else:
             parser.add_argument(f"--{field}", type=type(default_value), default=default_value, help=f"Set {field} (default: {default_value})")
     
-    args = parser.parse_args()
-    
-    # Convert args namespace to dictionary and then to the dataclass
-    config = dataclass_type(**vars(args))
+    try:
+        args = parser.parse_args()
+        config = dataclass_type(**vars(args))
+    except (argparse.ArgumentTypeError, SystemExit):
+        warnings.warn("Could not parse args, falling back to defaults.")
+        config = dataclass_type()
 
     return config

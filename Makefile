@@ -5,6 +5,12 @@ DOCS_TARGETS = html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub 
 $(DOCS_TARGETS):
 	$(MAKE) -C docs $@
 
+
+fixpath:
+	export PYTHONPATH=$(shell pwd):$$PYTHONPATH; \
+	echo $$PYTHONPATH
+
+
 # Default rule (optional): By default, let's build the HTML version of docs.
 # You can change 'html' to any other target you prefer as default.
 default: html
