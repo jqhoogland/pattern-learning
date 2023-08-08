@@ -10,8 +10,10 @@ parameters:
     num_training_steps:
         value: 100000
     d_model:
-        value: 150
+        value: 128
     frac_train:
         value: 0.75
     frac_label_noise:
         values: [0.0, 0.25, 0.1, 0.2, 0.3, 0.4, 0.05, 0.15, 0.35, 0.125, 0.375, 0.625, 0.875, 0.025, 0.075, 0.175, 0.225, 0.275, 0.325, 0.425, 0.475, 0.525, 0.575, 0.625, 0.675]
+    seed:
+        values: [0, 1, 2, 3, 4, 5]
