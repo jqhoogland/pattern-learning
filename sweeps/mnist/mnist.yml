@@ -1,6 +1,6 @@
 method: grid
 name: ln0.2-init-scale-sweep
-program: mnist.py
+program: unifying/mnist/mnist_fcn.py
 project: mnist-grokking
 parameters:
     num_training_steps:
