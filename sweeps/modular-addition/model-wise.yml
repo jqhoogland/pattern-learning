@@ -1,4 +1,4 @@
-method: grid
+~method: grid
 name: model-wise-grokking
 program: train.py
 parameters:
