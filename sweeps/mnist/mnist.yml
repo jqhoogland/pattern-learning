@@ -3,6 +3,7 @@ method: grid
 name: mnist-interpolation
 program: unifying/mnist/mnist_fcn.py
 project: mnist-grokking
+description: "fig 1 with multiple seeds"
 parameters:
     num_training_steps:
         value: 1000000
