@@ -279,7 +279,7 @@ class LabelNoiseDataLoader(DataLoader):
             
             dataset = Subset(dataset, indices)
 
-        super().__init__(dataset, train=train, **kwargs)
+        super().__init__(dataset, **kwargs)
     
     @staticmethod
     def apply_noise(data, true_targets, frac_label_noise: float = 0.0):
