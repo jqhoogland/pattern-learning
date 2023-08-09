@@ -12,7 +12,7 @@ parameters:
     width: 
         value: 200
     frac_label_noise:
-        value: 0.1  # Seems to not even be necessary
+        value: 0.1 
     weight_decay:
         value: 0.01
     frac_train:

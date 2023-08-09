@@ -2,13 +2,14 @@
 import json
 import math
 import warnings
-from typing import Dict, List, Literal, Optional, Tuple, TypedDict, Union, Protocol
+from typing import (Dict, List, Literal, Optional, Protocol, Tuple, TypedDict,
+                    Union)
 
 import blobfile as bf
 import numpy as np
 import torch
 from torch import LongTensor, Tensor
-from torch.utils.data import Dataset, Subset, DataLoader, TensorDataset
+from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
 
 DEFAULT_MODULUS = 97
 DEFAULT_DATA_DIR = "data"
@@ -245,7 +246,7 @@ class LabelNoiseConfig(Protocol):
 
 class LabelNoiseDataLoader(DataLoader):
 
-    def __init__(self, original_dataset: Dataset, frac_label_noise: float, subsample=1., **kwargs) -> None:
+    def __init__(self, original_dataset: Dataset, frac_label_noise: float, subsample=1., train=True, **kwargs) -> None:
         self.frac_label_noise = frac_label_noise
         self.original = DataLoader(original_dataset, **kwargs)
 
@@ -271,14 +272,14 @@ class LabelNoiseDataLoader(DataLoader):
         else:
             self.corrupted = DataLoader(corrupted_subset, **kwargs)
         
-        if subsample < 1.0:  # Always applied
+        if subsample < 1.0 and train:  # Always applied
             indices = torch.randperm(len(dataset))[
                 : int(len(dataset) * subsample)
             ].tolist()
             
             dataset = Subset(dataset, indices)
 
-        super().__init__(dataset, **kwargs)
+        super().__init__(dataset, train=train, **kwargs)
     
     @staticmethod
     def apply_noise(data, true_targets, frac_label_noise: float = 0.0):

@@ -11,9 +11,9 @@ from tqdm.notebook import tqdm
 
 import wandb
 from patterns.dataset import ModularArithmetic, Operator
+from patterns.learner import BaseLearner, Config, Reduction
 from patterns.transformer import Transformer
 from patterns.utils import generate_run_name
-from patterns.learner import BaseLearner, Config, Reduction
 
 DEFAULT_MODULUS = 113
 
