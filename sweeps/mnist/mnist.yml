@@ -26,8 +26,6 @@ parameters:
         value: 2.5
     lr:
         value: 0.0000025
-    max_lr:
-        value: null
     apply_noise_to_test:
         value: True
     seed:
