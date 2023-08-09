@@ -1,3 +1,4 @@
+entity: initially-overconf-learners
 method: grid
 name: mnist-interpolation
 program: unifying/mnist/mnist_fcn.py
